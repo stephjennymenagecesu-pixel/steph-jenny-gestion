@@ -1,3 +1,3 @@
-# Steph & Jenny Gestion V9 Google
+# Steph & Jenny Gestion V10 corrigée
 
-Version avec connexion Google Agenda côté navigateur. Utilise uniquement le Client ID OAuth. Ne jamais publier le Secret client.
+Chronomètre, récap tous clients, paie séparée Stéphanie/Jennyfer, reports positifs/négatifs, clôture fin de mois.
