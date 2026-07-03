@@ -1,3 +1,3 @@
-# Steph & Jenny Gestion V10 Finale
+# Steph & Jenny Gestion V10 Finale Planning corrigé
 
-Montants séparés Stéphanie/Jennyfer, chrono, reports, clôture, planning Google.
+Correction : le planning masque les interventions passées ou terminées. Possibilité de consulter l'historique masqué.
