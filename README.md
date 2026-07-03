@@ -1,3 +1,3 @@
-# Steph & Jenny Gestion V8 Finale
+# Steph & Jenny Gestion V9 Google
 
-Version finale. Sans devis, sans factures, sans rappels automatiques clients. Google Agenda : ouverture, préparation d'événement et import CSV simple. Les machines à 2,50 € sont uniquement pour Floriane & Max.
+Version avec connexion Google Agenda côté navigateur. Utilise uniquement le Client ID OAuth. Ne jamais publier le Secret client.
