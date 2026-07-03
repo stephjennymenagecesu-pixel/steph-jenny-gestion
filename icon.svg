@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<rect width="512" height="512" rx="110" fill="#8FB89A"/>
+<text x="256" y="205" text-anchor="middle" font-size="68" fill="#fff" font-family="Arial" font-weight="900">S &amp; J</text>
+<text x="256" y="285" text-anchor="middle" font-size="44" fill="#355243" font-family="Arial" font-weight="900">GESTION</text>
+<path d="M180 340c45-20 93-20 152 0" stroke="#fff" stroke-width="18" stroke-linecap="round" fill="none"/>
+</svg>
