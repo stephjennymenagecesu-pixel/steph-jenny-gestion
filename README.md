@@ -1,3 +1,3 @@
-# Steph & Jenny Gestion V10 Finale Planning corrigé
+# Steph & Jenny Gestion V10 Finale Machines
 
-Correction : le planning masque les interventions passées ou terminées. Possibilité de consulter l'historique masqué.
+Ajout d'une page Machines Flo & Max avec seulement la date et le nombre de machines. Les machines sont comptabilisées uniquement pour Stéphanie, sans heure d'arrivée ni de départ.
