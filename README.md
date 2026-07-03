@@ -1,3 +1,3 @@
-# Steph & Jenny Gestion V10 corrigée
+# Steph & Jenny Gestion V10 Finale
 
-Chronomètre, récap tous clients, paie séparée Stéphanie/Jennyfer, reports positifs/négatifs, clôture fin de mois.
+Montants séparés Stéphanie/Jennyfer, chrono, reports, clôture, planning Google.
