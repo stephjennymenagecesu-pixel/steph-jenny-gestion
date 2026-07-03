@@ -1,3 +1,8 @@
-# Steph & Jenny Gestion V10 Finale Machines
+# Steph & Jenny Gestion V10 Aboutie
 
-Ajout d'une page Machines Flo & Max avec seulement la date et le nombre de machines. Les machines sont comptabilisées uniquement pour Stéphanie, sans heure d'arrivée ni de départ.
+- Récap Stéphanie/Jennyfer séparé avec montants.
+- Machines Flo & Max saisies avec date + nombre uniquement.
+- Machines comptabilisées uniquement pour Stéphanie.
+- Machines visibles dans le récap Floriane & Max.
+- Planning masquant les interventions passées ou terminées.
+- Chronomètre et reports positifs/négatifs.
