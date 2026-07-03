@@ -1,11 +1,15 @@
 {
-  "name": "Steph & Jenny Gestion",
+  "name": "Steph & Jenny Gestion V8 Finale",
   "short_name": "Steph Jenny",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#FBF7EF",
   "theme_color": "#8FB89A",
   "icons": [
-    {"src": "icon.svg", "sizes": "any", "type": "image/svg+xml"}
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
   ]
 }
