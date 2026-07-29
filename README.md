@@ -1,10 +1,15 @@
-# Steph & Jenny Gestion V10 Complète
+# Steph & Jenny Gestion V10 Finale Stable
 
-Ajouts :
+Version validée techniquement avant mise en ligne.
+
+Fonctions incluses :
+- conservation et restauration des sauvegardes ;
 - clôture client par client ;
 - suppression et archivage des clients ;
-- récapitulatif propre avec en-tête mensuel ;
-- report de début nommé avec le mois en cours ;
-- report de fin nommé avec le mois suivant ;
-- lieux possibles : Jean-Claude (Jullouville / Donville), Richard (Granville / Saint-Pair) ;
-- détail des prestations : ménage, repassage ou linge.
+- récapitulatif et facturation par mois ;
+- reports du mois en cours vers le mois suivant ;
+- lieux Jean-Claude : Jullouville / Donville ;
+- lieux Richard : Granville / Saint-Pair ;
+- prestations : ménage, repassage ou linge ;
+- machines Flo & Max sans horaires, attribuées à Stéphanie ;
+- planning avec interventions passées masquées.
