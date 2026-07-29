@@ -1,8 +1,10 @@
-# Steph & Jenny Gestion V10 Aboutie
+# Steph & Jenny Gestion V10 Complète
 
-- Récap Stéphanie/Jennyfer séparé avec montants.
-- Machines Flo & Max saisies avec date + nombre uniquement.
-- Machines comptabilisées uniquement pour Stéphanie.
-- Machines visibles dans le récap Floriane & Max.
-- Planning masquant les interventions passées ou terminées.
-- Chronomètre et reports positifs/négatifs.
+Ajouts :
+- clôture client par client ;
+- suppression et archivage des clients ;
+- récapitulatif propre avec en-tête mensuel ;
+- report de début nommé avec le mois en cours ;
+- report de fin nommé avec le mois suivant ;
+- lieux possibles : Jean-Claude (Jullouville / Donville), Richard (Granville / Saint-Pair) ;
+- détail des prestations : ménage, repassage ou linge.
