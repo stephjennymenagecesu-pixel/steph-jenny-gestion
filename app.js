@@ -7,24 +7,24 @@ function merge(a,b){for(const k in b)a[k]=typeof b[k]=="object"&&!Array.isArray(
 function load(){try{let x=JSON.parse(localStorage.getItem(K));if(x)return merge(def(),x);for(const k of OLD){let o=localStorage.getItem(k);if(o){x=merge(def(),JSON.parse(o));localStorage.setItem(K,JSON.stringify(x));return x}}}catch(e){}return def()}
 let db=load(), screen="home", timer=null, tokenClient=null;
 const norm=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+function clientKey(name){
+ const n=norm(name);
+ if(!n)return "";
+ if(n.includes("jean claude"))return "jean claude";
+ if(n.includes("floriane")||n.includes("maxime"))return "floriane maxime";
+ if(n.includes("camille")||n.includes("benoit"))return "camille benoit";
+ if(n.includes("celine"))return "celine";
+ if(n.includes("richard"))return "richard";
+ if(n.includes("helene"))return "helene";
+ if(n.includes("nadege"))return "nadege";
+ return n.split(" ")[0]||n;
+}
+function sameClient(a,b){return clientKey(a)!==""&&clientKey(a)===clientKey(b)}
 function knownClientName(name){
  const n=norm(name); if(!n)return "";
- // Toujours privilégier le nom exact présent dans la fiche client.
- // Exemple : « Richard NOTHEAUX » ne doit jamais être remplacé par « Richard »,
- // sinon aucune option n'est sélectionnée et Safari revient sur la première cliente (Nadège).
  const exact=db.clients.find(c=>norm(c.name)===n); if(exact)return exact.name;
- const aliases={"richard":"Richard","jean claude":"Jean-Claude","helene":"Hélène","nadege":"Nadège","camille":"Camille & Benoît","benoit":"Camille & Benoît","floriane":"Floriane & Max","maxime":"Floriane & Max"};
- for(const [a,v] of Object.entries(aliases)){
-  if(n===a||n.startsWith(a+" ")||n.includes(" "+a+" ")){
-   const aliasExact=db.clients.find(c=>norm(c.name)===norm(v));
-   if(aliasExact)return aliasExact.name;
-   const aliasClient=db.clients.find(c=>norm(c.name)===a||norm(c.name).startsWith(a+" "));
-   if(aliasClient)return aliasClient.name;
-   return v;
-  }
- }
- const first=db.clients.find(c=>{let cn=norm(c.name), token=cn.split(" ")[0];return token.length>2&&(n===token||n.startsWith(token+" "))});
- return first?.name||name;
+ const byKey=db.clients.find(c=>sameClient(c.name,name));
+ return byKey?.name||name;
 }
 function migrateData(){
  db.ui=db.ui||{lastClient:""};
@@ -35,7 +35,7 @@ function migrateData(){
  db.interventions.forEach(x=>{if(!x.id)x.id=uid();x.client=knownClientName(x.client)});
  db.planning.forEach(x=>{if(!x.id)x.id=uid();x.client=knownClientName(x.client)});
  if(db.current?.client)db.current.client=knownClientName(db.current.client);
- db.version="v10-finale-stable-corrigee-archives-2";
+ db.version="v10-finale-stable-corrigee-archives-4";
  localStorage.setItem(K,JSON.stringify(db));
 }
 migrateData();
@@ -48,7 +48,14 @@ const month=(list=db.interventions)=>list.filter(x=>x.date?.startsWith(db.month)
 function worker(w){return w==="stephanie"?"Stéphanie":w==="jennyfer"?"Jennyfer":"À deux"}function mins(items,w){return items.filter(x=>x.worker==="deux"||x.worker===w).reduce((a,x)=>a+(+x.duration||0),0)}
 function machines(items){return items.filter(x=>x.client==="Floriane & Max").reduce((a,x)=>a+(+x.machines||0),0)}function machFor(w){return w==="stephanie"||w==="jennyfer"?machines(month().filter(x=>x.worker==="deux"||x.worker===w))/2:machines(month())}
 function decl(m){let h=Math.floor(Math.abs(m)/60),r=Math.abs(m)%60,sg=m<0?-1:1;return sg*(r>=31?h+1:h)}
-function rkey(c,w,m=db.month){return c+"|"+m+"|"+w}function getR(c,w,m=db.month){return +(db.reports?.[rkey(c,w,m)]||0)}function setR(c,w,v,m=db.month){db.reports[rkey(c,w,m)]=+v||0;save()}
+function rkey(c,w,m=db.month){return c+"|"+m+"|"+w}
+function getR(c,w,m=db.month){
+ let direct=db.reports?.[rkey(c,w,m)]; if(direct!==undefined)return +direct||0;
+ let suffix="|"+m+"|"+w;
+ let k=Object.keys(db.reports||{}).find(k=>k.endsWith(suffix)&&sameClient(k.slice(0,-suffix.length),c));
+ return k?+(db.reports[k]||0):0;
+}
+function setR(c,w,v,m=db.month){db.reports[rkey(knownClientName(c),w,m)]=+v||0;save()}
 function calc(c,w,raw){let rep=getR(c,w),adj=raw+rep,d=decl(adj),next=adj-d*60;return{rep,adj,d,next}}function rt(m){return m===0?"0 min":(m>0?"+":"")+m+" min"}
 function go(s){screen=s;render()}function nav(){return `<div class=nav><button onclick="go('home')">🏠<br>Accueil</button><button onclick="go('chrono')">⏱️<br>Chrono</button><button onclick="go('planning')">📅<br>Plan.</button><button onclick="go('clients')">👥<br>Clients</button><button onclick="go('settings')">⚙️<br>Réglages</button></div>`}
 function layout(c){if(timer)clearInterval(timer);timer=null;app.innerHTML=`<main class=app>${c}${nav()}</main>`}function render(){({home,chrono,clients:clientsPage,planning,google,allRecap,clientRecap,payroll,reports,closure,interventions,flomax,settings}[screen]||home)()}
@@ -59,7 +66,7 @@ function machineAmount(){return machineTotal()*db.settings.machinePrice}
 function machineRowsHTML(){let list=machineEntries().sort((a,b)=>a.date.localeCompare(b.date));return list.map(x=>`<p>${fd(x.date)} : <b>${x.count}</b> machine(s) = <b>${euros(x.count*db.settings.machinePrice)}</b></p>`).join("")||"<p>Aucune machine saisie.</p>"}
 
 function totals(){let ts=0,tj=0,ms=0,mj=0,es=0,ej=0;names().forEach(n=>{let d=rowData(n),rate=d.rate;ts+=d.cs.d;tj+=d.cj.d;es+=d.cs.d*rate;ej+=d.cj.d*rate});let mf=machineTotal();ms=mf;mj=0;es+=machineAmount();return{ts,tj,ms,mj,es,ej,total:es+ej,mt:mf}}
-function home(){let it=month(),s=mins(it,"stephanie"),j=mins(it,"jennyfer"),t=totals();layout(`<div class=hero><div class=logo>Steph & Jenny</div><div class=sub>GESTION V10 FINALE STABLE CORRIGÉE + ARCHIVES 2</div><p>${new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}</p></div>${db.current?`<div class="card notice"><h2>Chrono en cours</h2><p>${db.current.client} • ${worker(db.current.worker)}</p><div class=chrono id=t>00:00:00</div><button class="big stop" onclick=stopWork()>⏹ Terminer</button></div>`:`<button class=big onclick="go('chrono')">⏱️ Ouvrir le chronomètre</button>`}<div class=grid><button onclick="go('allRecap')">📋 Récap tous clients</button><button onclick="go('clientRecap')">👤 Récap client</button><button onclick="go('payroll')">💶 Fiche paie</button><button onclick="go('reports')">🔁 Reports</button><button onclick="go('closure')">🔒 Clôture mois</button><button onclick="go('interventions')">✏️ Heures</button><button onclick="go('flomax')">🧺 Machines Flo & Max</button><button onclick="go('google')">📅 Google</button></div><div class=card><div class=grid3><div class=stat><strong>${fmin(s)}</strong><span>Stéphanie</span></div><div class=stat><strong>${fmin(j)}</strong><span>Jennyfer</span></div><div class=stat><strong>${machineTotal()}</strong><span>machines</span></div></div></div><div class="card ok"><h3>Montants estimés</h3><p>Stéphanie : <b>${euros(t.es)}</b></p><p>Jennyfer : <b>${euros(t.ej)}</b></p><p>Total : <b>${euros(t.total)}</b></p></div>`);if(db.current)live("t")}
+function home(){let it=month(),s=mins(it,"stephanie"),j=mins(it,"jennyfer"),t=totals();layout(`<div class=hero><div class=logo>Steph & Jenny</div><div class=sub>GESTION V10 FINALE STABLE CORRIGÉE + ARCHIVES 4</div><p>${new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}</p></div>${db.current?`<div class="card notice"><h2>Chrono en cours</h2><p>${db.current.client} • ${worker(db.current.worker)}</p><div class=chrono id=t>00:00:00</div><button class="big stop" onclick=stopWork()>⏹ Terminer</button></div>`:`<button class=big onclick="go('chrono')">⏱️ Ouvrir le chronomètre</button>`}<div class=grid><button onclick="go('allRecap')">📋 Récap tous clients</button><button onclick="go('clientRecap')">👤 Récap client</button><button onclick="go('payroll')">💶 Fiche paie</button><button onclick="go('reports')">🔁 Reports</button><button onclick="go('closure')">🔒 Clôture mois</button><button onclick="go('interventions')">✏️ Heures</button><button onclick="go('flomax')">🧺 Machines Flo & Max</button><button onclick="go('google')">📅 Google</button></div><div class=card><div class=grid3><div class=stat><strong>${fmin(s)}</strong><span>Stéphanie</span></div><div class=stat><strong>${fmin(j)}</strong><span>Jennyfer</span></div><div class=stat><strong>${machineTotal()}</strong><span>machines</span></div></div></div><div class="card ok"><h3>Montants estimés</h3><p>Stéphanie : <b>${euros(t.es)}</b></p><p>Jennyfer : <b>${euros(t.ej)}</b></p><p>Total : <b>${euros(t.total)}</b></p></div>`);if(db.current)live("t")}
 function chrono(){let selected=knownClientName(db.ui?.lastClient)||clients()[0]?.name||"";let opts=clients().map(c=>`<option value="${c.name}" ${c.name===selected?"selected":""}>${c.name}</option>`).join("");layout(`<button onclick="go('home')">← Retour</button><h2>Chronomètre</h2>${db.current?`<div class="card notice"><h3>${db.current.client}</h3><p>${worker(db.current.worker)}</p><div class=chrono id=live>00:00:00</div><button class="big stop" onclick=stopWork()>⏹ Arrêter et enregistrer</button><button onclick=cancelWork()>Annuler</button></div>`:`<div class=card><label>Client</label><select id=cc onchange="rememberChronoClient();showRep();machBox()">${opts}</select><label>Qui ?</label><select id=cw onchange=showRep()><option value=deux>À deux</option><option value=stephanie>Stéphanie seule</option><option value=jennyfer>Jennyfer seule</option></select><div id=rep class="card ok"></div><label>Prestation</label><select id=ct><option>Ménage</option><option>Repassage</option><option>Linge</option></select><div id=chlocbox></div><div id=mb class="card notice"><label>Machines Flo & Max</label><input id=cm type=number value=0></div><label>Notes</label><textarea id=cn></textarea><button class=big onclick=startChrono()>▶ Démarrer</button></div>`}<div class=card><button class=blue onclick=editInter()>➕ Saisie manuelle</button></div>`);machBox();showRep();if(db.current)live("live")}
 function live(id){let e=()=>document.getElementById(id);let up=()=>{if(e()&&db.current)e().textContent=hms(Date.now()-new Date(db.current.start).getTime())};up();timer=setInterval(up,1000)}
 function showRep(){if(!$("#rep")||!$("#cc"))return;let c=$("#cc").value,w=$("#cw").value;$("#rep").innerHTML=w==="deux"?`Reports actuels<br>Stéphanie : <b>${rt(getR(c,"stephanie"))}</b><br>Jennyfer : <b>${rt(getR(c,"jennyfer"))}</b>`:`Report ${worker(w)} : <b>${rt(getR(c,w))}</b>`}
@@ -67,7 +74,12 @@ function rememberChronoClient(){if($("#cc")){db.ui=db.ui||{};db.ui.lastClient=$(
 function machBox(){if($("#mb"))$("#mb").style.display=$("#cc")?.value==="Floriane & Max"?"block":"none";let b=$("#chlocbox");if(b)b.innerHTML=locationSelect($("#cc")?.value,"","chloc")}function startChrono(){let c=knownClientName($("#cc").value);db.ui=db.ui||{};db.ui.lastClient=c;db.current={client:c,worker:$("#cw").value,type:$("#ct").value,machines:c==="Floriane & Max"?(+$("#cm").value||0):0,location:$("#chloc")?.value||"",note:$("#cn").value,start:new Date().toISOString()};save();go("chrono")}
 function cancelWork(){db.current=null;save();go("chrono")}function stopWork(){let end=new Date().toISOString();let obj={...db.current,id:uid(),end,date:db.current.start.slice(0,10),duration:dur(db.current.start,end)};db.interventions.push(obj);if(obj.planId){let p=db.planning.find(x=>x.id===obj.planId);if(p)p.done=true}db.current=null;save();alert("Intervention enregistrée. Le rendez-vous est retiré du planning.");go("interventions")}
 function names(){return [...new Set(month().map(x=>x.client))].sort((a,b)=>a.localeCompare(b))}
-function rowData(n){let it=month().filter(x=>x.client===n),rs=mins(it,"stephanie"),rj=mins(it,"jennyfer"),cs=calc(n,"stephanie",rs),cj=calc(n,"jennyfer",rj),m=0,rate=client(n).rate||db.settings.hourRate;return{it,rs,rj,cs,cj,m,rate,totalS:cs.d*rate,totalJ:cj.d*rate,totalM:0,total:(cs.d+cj.d)*rate}}
+function rowData(n){
+ let canonical=knownClientName(n)||n;
+ let it=month().filter(x=>sameClient(x.client,canonical));
+ let rs=mins(it,"stephanie"),rj=mins(it,"jennyfer"),cs=calc(canonical,"stephanie",rs),cj=calc(canonical,"jennyfer",rj),m=0,rate=client(canonical).rate||db.settings.hourRate;
+ return{it,rs,rj,cs,cj,m,rate,totalS:cs.d*rate,totalJ:cj.d*rate,totalM:0,total:(cs.d+cj.d)*rate}
+}
 function allRecap(){
  let t=totals(), currentLabel=cap(monthLabel(db.month)), nextLabel=cap(monthLabel(nextM(db.month)));
  let rows=names().map(n=>{
@@ -88,7 +100,8 @@ function allRecap(){
 }
 function payroll(){allRecap()}
 function clientRecap(n){
- n=n||clients()[0]?.name;
+ n=knownClientName(n||db.ui?.recapClient||clients()[0]?.name)||clients()[0]?.name;
+ db.ui=db.ui||{};db.ui.recapClient=n;save();
  let d=rowData(n);
  let isFM=n==="Floriane & Max";
  let mach=isFM?machineTotal():0;
@@ -104,7 +117,7 @@ function clientRecap(n){
    <p><b>${currentLabel}</b></p>
  </div>
  <label>Client</label>
- <select onchange="clientRecap(this.value)">${db.clients.map(c=>`<option ${c.name===n?"selected":""}>${c.name}</option>`).join("")}</select>
+ <select onchange="clientRecap(this.value)">${clients().map(c=>`<option value="${c.name}" ${sameClient(c.name,n)?"selected":""}>${c.name}</option>`).join("")}</select>
  <div class=card>
    <div class="row"><h2>${n}</h2><span class="pill">${isClientClosed(n)?"Clôturé":"En cours"}</span></div>
    <div class="tableWrap">
@@ -221,7 +234,7 @@ function deleteClient(id){
 function editInter(id){
  let x=id?db.interventions.find(i=>i.id===id):null;
  let selected=x?knownClientName(x.client):(knownClientName(db.ui?.lastClient)||clients()[0]?.name||"");
- let opts=clients().map(c=>`<option value="${c.name}" ${norm(selected)===norm(c.name)?"selected":""}>${c.name}</option>`).join("");
+ let opts=clients().map(c=>`<option value="${c.name}" ${sameClient(selected,c.name)?"selected":""}>${c.name}</option>`).join("");
  layout(`<button onclick="go('interventions')">← Retour</button><h2>Saisie manuelle</h2><input id=eid type=hidden value="${x?.id||""}">
  <label>Client</label><select id=ec onchange="refreshLocation()">${opts}</select>
  <div id=locbox></div>
