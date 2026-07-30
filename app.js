@@ -2,15 +2,32 @@
 const K="sj_v10_complete_data", OLD=["sj_v10_aboutie_data","sj_v10_finale_machines_data","sj_v10_finale_planning_corrige_data","sj_v10_finale_data","sj_v10_corrigee_data","sj_v10_definitive_data","sj_v9_google_data","sj_v8_finale_data","sj_v7_definitive_data"];
 const N=["Nadège","Camille & Benoît","Thierry","Serge","Hélène","Juliette","Céline","Cabinet d'infirmières","Dorothée & Laurent","Élodie","Maryse","Véronique","Jean-Christophe","Nicole","Aymeric","Daniel","Jean-Claude","Richard","Kath","Floriane & Max"];
 const uid=()=>crypto?.randomUUID?crypto.randomUUID():"id"+Date.now()+Math.random();
-const def=()=>({version:"v10-complete",month:new Date().toISOString().slice(0,7),current:null,settings:{hourRate:16,machinePrice:2.5},google:{clientId:"",accessToken:"",expiresAt:0,email:"steph.jenny.menagecesu@gmail.com"},clients:N.map((name,i)=>({id:uid(),ref:String(i+1).padStart(3,"0"),name,phone:"",address:"",type:name==="Floriane & Max"?"Location saisonnière":"CESU",rate:16,notes:""})),interventions:[],planning:[],machines:[],reports:{},closures:{}});
+const def=()=>({version:"v10-finale-stable-corrigee-archives",ui:{lastClient:""},month:new Date().toISOString().slice(0,7),current:null,settings:{hourRate:16,machinePrice:2.5},google:{clientId:"",accessToken:"",expiresAt:0,email:"steph.jenny.menagecesu@gmail.com"},clients:N.map((name,i)=>({id:uid(),ref:String(i+1).padStart(3,"0"),name,phone:"",address:"",type:name==="Floriane & Max"?"Location saisonnière":"CESU",rate:16,notes:""})),interventions:[],planning:[],machines:[],reports:{},closures:{}});
 function merge(a,b){for(const k in b)a[k]=typeof b[k]=="object"&&!Array.isArray(b[k])&&b[k]?merge(a[k]||{},b[k]):b[k];return a}
 function load(){try{let x=JSON.parse(localStorage.getItem(K));if(x)return merge(def(),x);for(const k of OLD){let o=localStorage.getItem(k);if(o){x=merge(def(),JSON.parse(o));localStorage.setItem(K,JSON.stringify(x));return x}}}catch(e){}return def()}
-let db=load(), screen="home", timer=null, tokenClient=null; const save=()=>localStorage.setItem(K,JSON.stringify(db));
+let db=load(), screen="home", timer=null, tokenClient=null;
+const norm=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+function knownClientName(name){
+ const n=norm(name); if(!n)return "";
+ const aliases={"richard":"Richard","jean claude":"Jean-Claude","helene":"Hélène","nadege":"Nadège","camille":"Camille & Benoît","benoit":"Camille & Benoît","floriane":"Floriane & Max","maxime":"Floriane & Max"};
+ for(const [a,v] of Object.entries(aliases))if(n===a||n.startsWith(a+" ")||n.includes(" "+a+" "))return v;
+ const exact=db.clients.find(c=>norm(c.name)===n); if(exact)return exact.name;
+ const first=db.clients.find(c=>{let cn=norm(c.name), token=cn.split(" ")[0];return token.length>2&&(n===token||n.startsWith(token+" "))});
+ return first?.name||name;
+}
+function migrateData(){
+ db.ui=db.ui||{lastClient:""};
+ (db.interventions||[]).forEach(x=>{x.client=knownClientName(x.client)});
+ (db.planning||[]).forEach(x=>{x.client=knownClientName(x.client)});
+ if(db.current?.client)db.current.client=knownClientName(db.current.client);
+}
+migrateData();
+const save=()=>localStorage.setItem(K,JSON.stringify(db));
 const $=q=>document.querySelector(q), pad=n=>String(n).padStart(2,"0"), today=()=>new Date().toISOString().slice(0,10);
 const euros=n=>Number(n||0).toFixed(2).replace(".",",")+" €", fd=s=>new Date(s+"T00:00:00").toLocaleDateString("fr-FR"), ft=d=>pad(d.getHours())+":"+pad(d.getMinutes());
 const dur=(a,b)=>Math.max(0,Math.ceil((new Date(b)-new Date(a))/60000)), fmin=m=>(m<0?"-":"")+Math.floor(Math.abs(m)/60)+"h"+pad(Math.abs(m)%60);
 const hms=ms=>{let s=Math.floor(Math.max(0,ms)/1000),h=Math.floor(s/3600);s-=h*3600;let m=Math.floor(s/60);s-=m*60;return pad(h)+":"+pad(m)+":"+pad(s)}
-const month=(list=db.interventions)=>list.filter(x=>x.date?.startsWith(db.month)), clients=()=>db.clients.filter(c=>!c.archived), client=n=>db.clients.find(c=>c.name===n)||{rate:db.settings.hourRate};
+const month=(list=db.interventions)=>list.filter(x=>x.date?.startsWith(db.month)), clients=()=>db.clients.filter(c=>!c.archived), client=n=>db.clients.find(c=>norm(c.name)===norm(knownClientName(n)))||{rate:db.settings.hourRate};
 function worker(w){return w==="stephanie"?"Stéphanie":w==="jennyfer"?"Jennyfer":"À deux"}function mins(items,w){return items.filter(x=>x.worker==="deux"||x.worker===w).reduce((a,x)=>a+(+x.duration||0),0)}
 function machines(items){return items.filter(x=>x.client==="Floriane & Max").reduce((a,x)=>a+(+x.machines||0),0)}function machFor(w){return w==="stephanie"||w==="jennyfer"?machines(month().filter(x=>x.worker==="deux"||x.worker===w))/2:machines(month())}
 function decl(m){let h=Math.floor(Math.abs(m)/60),r=Math.abs(m)%60,sg=m<0?-1:1;return sg*(r>=31?h+1:h)}
@@ -25,11 +42,12 @@ function machineAmount(){return machineTotal()*db.settings.machinePrice}
 function machineRowsHTML(){let list=machineEntries().sort((a,b)=>a.date.localeCompare(b.date));return list.map(x=>`<p>${fd(x.date)} : <b>${x.count}</b> machine(s) = <b>${euros(x.count*db.settings.machinePrice)}</b></p>`).join("")||"<p>Aucune machine saisie.</p>"}
 
 function totals(){let ts=0,tj=0,ms=0,mj=0,es=0,ej=0;names().forEach(n=>{let d=rowData(n),rate=d.rate;ts+=d.cs.d;tj+=d.cj.d;es+=d.cs.d*rate;ej+=d.cj.d*rate});let mf=machineTotal();ms=mf;mj=0;es+=machineAmount();return{ts,tj,ms,mj,es,ej,total:es+ej,mt:mf}}
-function home(){let it=month(),s=mins(it,"stephanie"),j=mins(it,"jennyfer"),t=totals();layout(`<div class=hero><div class=logo>Steph & Jenny</div><div class=sub>GESTION V10 COMPLÈTE</div><p>${new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}</p></div>${db.current?`<div class="card notice"><h2>Chrono en cours</h2><p>${db.current.client} • ${worker(db.current.worker)}</p><div class=chrono id=t>00:00:00</div><button class="big stop" onclick=stopWork()>⏹ Terminer</button></div>`:`<button class=big onclick="go('chrono')">⏱️ Ouvrir le chronomètre</button>`}<div class=grid><button onclick="go('allRecap')">📋 Récap tous clients</button><button onclick="go('clientRecap')">👤 Récap client</button><button onclick="go('payroll')">💶 Fiche paie</button><button onclick="go('reports')">🔁 Reports</button><button onclick="go('closure')">🔒 Clôture mois</button><button onclick="go('interventions')">✏️ Heures</button><button onclick="go('flomax')">🧺 Machines Flo & Max</button><button onclick="go('google')">📅 Google</button></div><div class=card><div class=grid3><div class=stat><strong>${fmin(s)}</strong><span>Stéphanie</span></div><div class=stat><strong>${fmin(j)}</strong><span>Jennyfer</span></div><div class=stat><strong>${machineTotal()}</strong><span>machines</span></div></div></div><div class="card ok"><h3>Montants estimés</h3><p>Stéphanie : <b>${euros(t.es)}</b></p><p>Jennyfer : <b>${euros(t.ej)}</b></p><p>Total : <b>${euros(t.total)}</b></p></div>`);if(db.current)live("t")}
-function chrono(){let opts=clients().map(c=>`<option>${c.name}</option>`).join("");layout(`<button onclick="go('home')">← Retour</button><h2>Chronomètre</h2>${db.current?`<div class="card notice"><h3>${db.current.client}</h3><p>${worker(db.current.worker)}</p><div class=chrono id=live>00:00:00</div><button class="big stop" onclick=stopWork()>⏹ Arrêter et enregistrer</button><button onclick=cancelWork()>Annuler</button></div>`:`<div class=card><label>Client</label><select id=cc onchange="showRep();machBox()">${opts}</select><label>Qui ?</label><select id=cw onchange=showRep()><option value=deux>À deux</option><option value=stephanie>Stéphanie seule</option><option value=jennyfer>Jennyfer seule</option></select><div id=rep class="card ok"></div><label>Prestation</label><select id=ct><option>Ménage</option><option>Repassage</option><option>Linge</option></select><div id=chlocbox></div><div id=mb class="card notice"><label>Machines Flo & Max</label><input id=cm type=number value=0></div><label>Notes</label><textarea id=cn></textarea><button class=big onclick=startChrono()>▶ Démarrer</button></div>`}<div class=card><button class=blue onclick=editInter()>➕ Saisie manuelle</button></div>`);machBox();showRep();if(db.current)live("live")}
+function home(){let it=month(),s=mins(it,"stephanie"),j=mins(it,"jennyfer"),t=totals();layout(`<div class=hero><div class=logo>Steph & Jenny</div><div class=sub>GESTION V10 FINALE STABLE CORRIGÉE + ARCHIVES</div><p>${new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}</p></div>${db.current?`<div class="card notice"><h2>Chrono en cours</h2><p>${db.current.client} • ${worker(db.current.worker)}</p><div class=chrono id=t>00:00:00</div><button class="big stop" onclick=stopWork()>⏹ Terminer</button></div>`:`<button class=big onclick="go('chrono')">⏱️ Ouvrir le chronomètre</button>`}<div class=grid><button onclick="go('allRecap')">📋 Récap tous clients</button><button onclick="go('clientRecap')">👤 Récap client</button><button onclick="go('payroll')">💶 Fiche paie</button><button onclick="go('reports')">🔁 Reports</button><button onclick="go('closure')">🔒 Clôture mois</button><button onclick="go('interventions')">✏️ Heures</button><button onclick="go('flomax')">🧺 Machines Flo & Max</button><button onclick="go('google')">📅 Google</button></div><div class=card><div class=grid3><div class=stat><strong>${fmin(s)}</strong><span>Stéphanie</span></div><div class=stat><strong>${fmin(j)}</strong><span>Jennyfer</span></div><div class=stat><strong>${machineTotal()}</strong><span>machines</span></div></div></div><div class="card ok"><h3>Montants estimés</h3><p>Stéphanie : <b>${euros(t.es)}</b></p><p>Jennyfer : <b>${euros(t.ej)}</b></p><p>Total : <b>${euros(t.total)}</b></p></div>`);if(db.current)live("t")}
+function chrono(){let selected=knownClientName(db.ui?.lastClient)||clients()[0]?.name||"";let opts=clients().map(c=>`<option value="${c.name}" ${c.name===selected?"selected":""}>${c.name}</option>`).join("");layout(`<button onclick="go('home')">← Retour</button><h2>Chronomètre</h2>${db.current?`<div class="card notice"><h3>${db.current.client}</h3><p>${worker(db.current.worker)}</p><div class=chrono id=live>00:00:00</div><button class="big stop" onclick=stopWork()>⏹ Arrêter et enregistrer</button><button onclick=cancelWork()>Annuler</button></div>`:`<div class=card><label>Client</label><select id=cc onchange="rememberChronoClient();showRep();machBox()">${opts}</select><label>Qui ?</label><select id=cw onchange=showRep()><option value=deux>À deux</option><option value=stephanie>Stéphanie seule</option><option value=jennyfer>Jennyfer seule</option></select><div id=rep class="card ok"></div><label>Prestation</label><select id=ct><option>Ménage</option><option>Repassage</option><option>Linge</option></select><div id=chlocbox></div><div id=mb class="card notice"><label>Machines Flo & Max</label><input id=cm type=number value=0></div><label>Notes</label><textarea id=cn></textarea><button class=big onclick=startChrono()>▶ Démarrer</button></div>`}<div class=card><button class=blue onclick=editInter()>➕ Saisie manuelle</button></div>`);machBox();showRep();if(db.current)live("live")}
 function live(id){let e=()=>document.getElementById(id);let up=()=>{if(e()&&db.current)e().textContent=hms(Date.now()-new Date(db.current.start).getTime())};up();timer=setInterval(up,1000)}
 function showRep(){if(!$("#rep")||!$("#cc"))return;let c=$("#cc").value,w=$("#cw").value;$("#rep").innerHTML=w==="deux"?`Reports actuels<br>Stéphanie : <b>${rt(getR(c,"stephanie"))}</b><br>Jennyfer : <b>${rt(getR(c,"jennyfer"))}</b>`:`Report ${worker(w)} : <b>${rt(getR(c,w))}</b>`}
-function machBox(){if($("#mb"))$("#mb").style.display="none";let b=$("#chlocbox");if(b)b.innerHTML=locationSelect($("#cc")?.value,"","chloc")}function startChrono(){let c=$("#cc").value;db.current={client:c,worker:$("#cw").value,type:$("#ct").value,machines:c==="Floriane & Max"?(+$("#cm").value||0):0,location:$("#chloc")?.value||"",note:$("#cn").value,start:new Date().toISOString()};save();go("chrono")}
+function rememberChronoClient(){if($("#cc")){db.ui=db.ui||{};db.ui.lastClient=$("#cc").value;save()}}
+function machBox(){if($("#mb"))$("#mb").style.display=$("#cc")?.value==="Floriane & Max"?"block":"none";let b=$("#chlocbox");if(b)b.innerHTML=locationSelect($("#cc")?.value,"","chloc")}function startChrono(){let c=knownClientName($("#cc").value);db.ui=db.ui||{};db.ui.lastClient=c;db.current={client:c,worker:$("#cw").value,type:$("#ct").value,machines:c==="Floriane & Max"?(+$("#cm").value||0):0,location:$("#chloc")?.value||"",note:$("#cn").value,start:new Date().toISOString()};save();go("chrono")}
 function cancelWork(){db.current=null;save();go("chrono")}function stopWork(){let end=new Date().toISOString();let obj={...db.current,id:uid(),end,date:db.current.start.slice(0,10),duration:dur(db.current.start,end)};db.interventions.push(obj);if(obj.planId){let p=db.planning.find(x=>x.id===obj.planId);if(p)p.done=true}db.current=null;save();alert("Intervention enregistrée. Le rendez-vous est retiré du planning.");go("interventions")}
 function names(){return [...new Set(month().map(x=>x.client))].sort((a,b)=>a.localeCompare(b))}
 function rowData(n){let it=month().filter(x=>x.client===n),rs=mins(it,"stephanie"),rj=mins(it,"jennyfer"),cs=calc(n,"stephanie",rs),cj=calc(n,"jennyfer",rj),m=0,rate=client(n).rate||db.settings.hourRate;return{it,rs,rj,cs,cj,m,rate,totalS:cs.d*rate,totalJ:cj.d*rate,totalM:0,total:(cs.d+cj.d)*rate}}
@@ -37,7 +55,7 @@ function allRecap(){
  let t=totals(), currentLabel=cap(monthLabel(db.month)), nextLabel=cap(monthLabel(nextM(db.month)));
  let rows=names().map(n=>{
    let d=rowData(n), status=isClientClosed(n)?"Clôturé":"En cours";
-   return `<tr><td><b>${n}</b><br><span class="pill">${status}</span></td><td>${fmin(d.rs)}<br>Début ${currentLabel} : ${rt(d.cs.rep)}<br>Déclarer <b>${d.cs.d}h</b><br>Vers ${nextLabel} : ${rt(d.cs.next)}<br><b>${euros(d.totalS)}</b></td><td>${fmin(d.rj)}<br>Début ${currentLabel} : ${rt(d.cj.rep)}<br>Déclarer <b>${d.cj.d}h</b><br>Vers ${nextLabel} : ${rt(d.cj.next)}<br><b>${euros(d.totalJ)}</b></td><td>-</td><td>${euros(d.total)}</td></tr>`
+   return `<tr><td><b>${n}</b><br><span class="pill">${status}</span></td><td>${fmin(d.rs)}<br>Report du mois en cours (${currentLabel}) : ${rt(d.cs.rep)}<br>Déclarer <b>${d.cs.d}h</b><br>Report de fin pour le mois suivant (${nextLabel}) : ${rt(d.cs.next)}<br><b>${euros(d.totalS)}</b></td><td>${fmin(d.rj)}<br>Report du mois en cours (${currentLabel}) : ${rt(d.cj.rep)}<br>Déclarer <b>${d.cj.d}h</b><br>Report de fin pour le mois suivant (${nextLabel}) : ${rt(d.cj.next)}<br><b>${euros(d.totalJ)}</b></td><td>-</td><td>${euros(d.total)}</td></tr>`
  }).join("");
  let mach=machineTotal(), machAmt=machineAmount();
  if(mach>0)rows+=`<tr><td><b>Floriane & Max<br>Machines</b></td><td>${mach} machine(s)<br><b>${euros(machAmt)}</b></td><td>0</td><td>${mach}</td><td><b>${euros(machAmt)}</b></td></tr>`;
@@ -109,8 +127,9 @@ function cap(s){return s?s.charAt(0).toUpperCase()+s.slice(1):""}
 function closureKey(clientName,month=db.month){return clientName+"|"+month}
 function isClientClosed(clientName,month=db.month){return !!db.closures?.[closureKey(clientName,month)]}
 function allowedLocations(clientName){
- if(clientName==="Jean-Claude")return ["Jullouville","Donville"];
- if(clientName==="Richard")return ["Granville","Saint-Pair"];
+ let n=norm(clientName);
+ if(n.startsWith("jean claude"))return ["Jullouville","Donville"];
+ if(n.startsWith("richard"))return ["Granville","Saint-Pair"];
  return [];
 }
 function locationSelect(clientName,current="",id="eloc"){
@@ -143,10 +162,11 @@ function closeMonth(){
 function clientsPage(){
  let active=db.clients.filter(c=>!c.archived), archived=db.clients.filter(c=>c.archived);
  layout(`<button onclick="go('home')">← Retour</button><h2>Clients</h2><button class=big onclick=clientForm()>➕ Ajouter un client</button>
+ <div class="card notice"><b>Pour une cliente que tu n’as plus :</b><br>appuie sur <b>📦 Archiver</b>. Elle disparaîtra des listes et du chrono, mais ses anciennes interventions et ses récapitulatifs resteront conservés.</div>
  <h3>Clients actifs</h3>
- ${active.map(c=>`<div class=item><div class=row><b>${c.name}</b><span class=pill>${c.type||""}</span></div><p>${c.phone||""}<br>${c.address||""}</p><div class=grid><button onclick="clientForm('${c.id}')">✏️ Fiche</button><button onclick="clientRecap('${c.name.replaceAll("'","\\'")}')">📄 Récap</button><button onclick="archiveClient('${c.id}')">📦 Archiver</button><button class=stop onclick="deleteClient('${c.id}')">🗑️ Supprimer</button></div></div>`).join("")||"<div class=card>Aucun client actif.</div>"}
+ ${active.map(c=>`<div class=item><div class=row><b>${c.name}</b><span class=pill>${c.type||""}</span></div><p>${c.phone||""}<br>${c.address||""}</p><div class=grid><button onclick="clientForm('${c.id}')">✏️ Fiche</button><button onclick="clientRecap('${c.name.replaceAll("'","\\'")}')">📄 Récap</button><button onclick="archiveClient('${c.id}')">📦 Archiver</button></div></div>`).join("")||"<div class=card>Aucun client actif.</div>"}
  <h3>Clients archivés</h3>
- ${archived.map(c=>`<div class=item><b>${c.name}</b><div class=grid><button onclick="restoreClient('${c.id}')">♻️ Réactiver</button><button class=stop onclick="deleteClient('${c.id}')">🗑️ Supprimer</button></div></div>`).join("")||"<div class=card>Aucun client archivé.</div>"}`)
+ ${archived.map(c=>`<div class=item><b>${c.name}</b><p>Historique conservé</p><div class=grid><button onclick="restoreClient('${c.id}')">♻️ Réactiver</button><button onclick="clientRecap('${c.name.replaceAll("'","\\'")}')">📄 Ancien récap</button><button class=stop onclick="deleteClient('${c.id}')">🗑️ Supprimer définitivement</button></div></div>`).join("")||"<div class=card>Aucun client archivé.</div>"}`)
 }
 function clientForm(id){
  let c=id?db.clients.find(x=>x.id===id):{};
@@ -168,7 +188,7 @@ function saveClient(){
  save();go("clients")
 }
 
-function archiveClient(id){let c=db.clients.find(x=>x.id===id);if(c){c.archived=true;save();go("clients")}}
+function archiveClient(id){let c=db.clients.find(x=>x.id===id);if(!c)return;if(!confirm("Archiver "+c.name+" ? La cliente disparaîtra des listes actives, mais tout son historique sera conservé."))return;c.archived=true;save();go("clients")}
 function restoreClient(id){let c=db.clients.find(x=>x.id===id);if(c){c.archived=false;save();go("clients")}}
 function deleteClient(id){
  let c=db.clients.find(x=>x.id===id);if(!c)return;
@@ -182,7 +202,9 @@ function deleteClient(id){
 }
 
 function editInter(id){
- let x=id?db.interventions.find(i=>i.id===id):null,opts=clients().map(c=>`<option ${x?.client===c.name?"selected":""}>${c.name}</option>`).join("");
+ let x=id?db.interventions.find(i=>i.id===id):null;
+ let selected=x?knownClientName(x.client):(knownClientName(db.ui?.lastClient)||clients()[0]?.name||"");
+ let opts=clients().map(c=>`<option value="${c.name}" ${norm(selected)===norm(c.name)?"selected":""}>${c.name}</option>`).join("");
  layout(`<button onclick="go('interventions')">← Retour</button><h2>Saisie manuelle</h2><input id=eid type=hidden value="${x?.id||""}">
  <label>Client</label><select id=ec onchange="refreshLocation()">${opts}</select>
  <div id=locbox></div>
@@ -192,15 +214,17 @@ function editInter(id){
  <label>Arrivée</label><input id=es type=time value="${x?ft(new Date(x.start)):""}">
  <label>Départ</label><input id=ee type=time value="${x?ft(new Date(x.end)):""}">
  <label>Notes</label><textarea id=en>${x?.note||""}</textarea>
- <button class="big blue" onclick=saveInter()>💾 Enregistrer</button>`);
+ <button class="big blue" onclick=saveInter()>💾 Enregistrer</button>${x?`<button class="big stop" onclick="delInterFromForm('${x.id}')">🗑️ Supprimer cette intervention</button>`:""}`);
  if(x){$("#ew").value=x.worker;$("#et").value=x.type||"Ménage"}
  refreshLocation(x?.location||"")
 }
-function refreshLocation(current=""){let box=$("#locbox");if(!box)return;box.innerHTML=locationSelect($("#ec").value,current)}function saveInter(){
+function refreshLocation(current=""){let box=$("#locbox");if(!box)return;box.innerHTML=locationSelect($("#ec").value,current)}
+function delInterFromForm(id){if(confirm("Supprimer définitivement cette intervention ?")){db.interventions=db.interventions.filter(x=>x.id!==id);save();go("interventions")}}
+function saveInter(){
  let id=$("#eid").value,d=$("#ed").value,s=$("#es").value,e=$("#ee").value;
  if(!d||!s||!e)return alert("Date ou heures manquantes.");
  let st=new Date(`${d}T${s}:00`).toISOString(),en=new Date(`${d}T${e}:00`).toISOString(),cl=$("#ec").value;
- let o={id:id||uid(),client:cl,worker:$("#ew").value,type:$("#et").value,location:$("#eloc")?.value||"",machines:0,note:$("#en").value,start:st,end:en,date:d,duration:dur(st,en)};
+ cl=knownClientName(cl);db.ui=db.ui||{};db.ui.lastClient=cl;let o={id:id||uid(),client:cl,worker:$("#ew").value,type:$("#et").value,location:$("#eloc")?.value||"",machines:0,note:$("#en").value,start:st,end:en,date:d,duration:dur(st,en)};
  db.interventions=id?db.interventions.map(x=>x.id===id?o:x):[...db.interventions,o];
  save();go("interventions")
 }
@@ -227,12 +251,12 @@ function showDonePlans(){
 }
 function markPlanDone(id){let p=db.planning.find(x=>x.id===id);if(p){p.done=true;save();planning()}}
 function unmarkPlanDone(id){let p=db.planning.find(x=>x.id===id);if(p){p.done=false;save();planning()}}
-function startFromPlan(id){let p=db.planning.find(x=>x.id===id);if(!p)return;let c=clients().find(x=>p.client?.toLowerCase().includes(x.name.toLowerCase()))?.name||p.client;db.current={client:c,worker:"deux",type:p.type||"Ménage",machines:c==="Floriane & Max"?0:0,note:"Depuis planning Google",start:new Date().toISOString(),planId:id};save();go("chrono")}
+function startFromPlan(id){let p=db.planning.find(x=>x.id===id);if(!p)return;let c=knownClientName(p.client);db.current={client:c,worker:"deux",type:p.type||"Ménage",machines:c==="Floriane & Max"?0:0,note:"Depuis planning Google",start:new Date().toISOString(),planId:id};save();go("chrono")}
 function google(){layout(`<button onclick="go('home')">← Retour</button><h2>Google Agenda</h2><div class=card><p>Compte : <b>${db.google.email}</b></p><p>État : <b>${db.google.accessToken&&Date.now()<db.google.expiresAt?"connecté":"non connecté"}</b></p></div><div class=card><label>Client ID Google</label><textarea id=g>${db.google.clientId||""}</textarea><button class=big onclick="db.google.clientId=$('#g').value.trim();save();alert('Client ID enregistré')">💾 Enregistrer</button></div><div class=grid><button onclick=connectGoogle()>🔐 Se connecter</button><button onclick=loadGoogleEvents()>⬇️ Importer mois</button><button onclick="window.open('https://calendar.google.com/calendar/u/0/r','_blank')">📅 Ouvrir</button></div>`)}
 function connectGoogle(){if(!db.google.clientId)return alert("Colle le Client ID."); if(!window.google?.accounts?.oauth2)return alert("Attends 5 secondes."); tokenClient=google.accounts.oauth2.initTokenClient({client_id:db.google.clientId,scope:"https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly",callback:r=>{if(r.error)return alert(r.error);db.google.accessToken=r.access_token;db.google.expiresAt=Date.now()+((r.expires_in||3600)-60)*1000;save();alert("Google connecté");go("google")}});tokenClient.requestAccessToken({prompt:"consent"})}
 async function gfetch(url){return fetch(url,{headers:{Authorization:"Bearer "+db.google.accessToken}})}async function loadGoogleEvents(){try{let st=new Date(db.month+"-01T00:00:00"),en=new Date(st);en.setMonth(en.getMonth()+1);let r=await gfetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(st.toISOString())}&timeMax=${encodeURIComponent(en.toISOString())}&singleEvents=true&orderBy=startTime&maxResults=80`);let data=await r.json(),c=0;(data.items||[]).forEach(ev=>{let dt=ev.start?.dateTime||ev.start?.date;if(!dt)return;if(!db.planning.find(p=>p.googleId===ev.id)){let summary=ev.summary||"RDV";db.planning.push({id:uid(),googleId:ev.id,date:dt.slice(0,10),time:ev.start?.dateTime?dt.slice(11,16):"09:00",client:guess(summary),type:summary});c++}});save();alert(c+" événement(s) importé(s)") ;go("planning")}catch(e){alert("Erreur import")}}
 function guess(s){let f=db.clients.find(c=>s.toLowerCase().includes(c.name.toLowerCase().split(" ")[0]));return f?f.name:s}
-function settings(){layout(`<button onclick="go('home')">← Retour</button><h2>Réglages</h2><div class="card ok"><p>Version V10 complète : planning épuré, chrono, reports, paie séparée et machines Flo & Max pour Stéphanie.</p></div><div class=grid><button onclick="go('allRecap')">📋 Récap tous</button><button onclick="go('reports')">🔁 Reports</button><button onclick="go('closure')">🔒 Clôture</button><button onclick=exportData()>💾 Sauvegarde</button></div><div class=card><label>Mois affiché</label><input type=month value="${db.month}" onchange="db.month=this.value;save();go('home')"><label>Tarif horaire</label><input type=number value="${db.settings.hourRate}" onchange="db.settings.hourRate=+this.value;save()"><label>Prix machine Flo & Max</label><input type=number step=.01 value="${db.settings.machinePrice}" onchange="db.settings.machinePrice=+this.value;save()"></div><div class=card><button class=big onclick=exportData()>💾 Télécharger sauvegarde</button><label>Restaurer</label><input type=file onchange=importData(event)></div>`)}
+function settings(){layout(`<button onclick="go('home')">← Retour</button><h2>Réglages</h2><div class="card ok"><p>Version V10 Finale Stable corrigée : planning épuré, chrono, reports, paie séparée et machines Flo & Max pour Stéphanie.</p></div><div class=grid><button onclick="go('allRecap')">📋 Récap tous</button><button onclick="go('reports')">🔁 Reports</button><button onclick="go('closure')">🔒 Clôture</button><button onclick=exportData()>💾 Sauvegarde</button></div><div class=card><label>Mois affiché</label><input type=month value="${db.month}" onchange="db.month=this.value;save();go('home')"><label>Tarif horaire</label><input type=number value="${db.settings.hourRate}" onchange="db.settings.hourRate=+this.value;save()"><label>Prix machine Flo & Max</label><input type=number step=.01 value="${db.settings.machinePrice}" onchange="db.settings.machinePrice=+this.value;save()"></div><div class=card><button class=big onclick=exportData()>💾 Télécharger sauvegarde</button><label>Restaurer</label><input type=file onchange=importData(event)></div>`)}
 function exportData(){let blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="sauvegarde_steph_jenny_v10_finale.json";a.click()}
 function importData(e){let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{db=merge(def(),JSON.parse(r.result));save();go("home");alert("Sauvegarde restaurée")}catch(e){alert("Fichier invalide")}};r.readAsText(f)}
 render();if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{})}
