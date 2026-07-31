@@ -1,16 +1,9 @@
-# Steph & Jenny Gestion — V10 Finale Stable Corrigée
+# Steph & Jenny Gestion — V10 Finale Stock + Notes + PDF
 
-Corrections principales :
-- le client choisi au chronomètre est mémorisé et réellement enregistré ;
-- le bouton Modifier recharge la bonne cliente, y compris les anciens noms complets ;
-- suppression possible directement depuis le formulaire au crayon ;
-- lieux disponibles pour Richard (Granville / Saint-Pair) et Jean-Claude (Jullouville / Donville) ;
-- récapitulatif mensuel avec report du mois en cours et report de fin pour le mois suivant ;
-- machines Flo & Max détaillées dans leur récapitulatif et comptées uniquement pour Stéphanie ;
-- conservation de la clé de données V10 existante pour éviter toute perte.
-
-
-MISE À JOUR ARCHIVES CLIENTS
-- Le bouton Archiver masque une ancienne cliente sans supprimer son historique.
-- Les clientes archivées peuvent être réactivées.
-- La suppression définitive est réservée à la liste des clientes archivées et efface aussi leur historique.
+Nouveautés :
+- notes sur chaque intervention, au chrono et en saisie manuelle ;
+- PDF séparé Stéphanie et PDF séparé Jennyfer ;
+- suivi de stock Flo & Max avec demi-quantités ;
+- déduction automatique du stock lors de la saisie ;
+- récap Flo & Max avec heures, machines et stock restant ;
+- conservation des données existantes via la même clé locale.
