@@ -1,9 +1,6 @@
-# Steph & Jenny Gestion — V10 Finale Stock + Notes + PDF
+# V10 Finale — correction chrono Flo & Max
 
-Nouveautés :
-- notes sur chaque intervention, au chrono et en saisie manuelle ;
-- PDF séparé Stéphanie et PDF séparé Jennyfer ;
-- suivi de stock Flo & Max avec demi-quantités ;
-- déduction automatique du stock lors de la saisie ;
-- récap Flo & Max avec heures, machines et stock restant ;
-- conservation des données existantes via la même clé locale.
+- Quand le chrono Flo & Max est démarré depuis le planning, l'encadré des produits de réserve apparaît immédiatement.
+- Les quantités saisies sont déduites automatiquement du stock à l'arrêt du chrono.
+- La note d'intervention reste visible et modifiable pendant tout le chrono.
+- Le détail du stock reste disponible dans le récapitulatif de fin de mois.

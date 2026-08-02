@@ -386,6 +386,32 @@ function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 function qty(v){let n=Number(v||0);return Number.isInteger(n)?String(n):String(n).replace('.',',')}
 function stockTableHTML(){return `<div class="tableWrap"><table><tr><th>Produit</th><th>Stock restant</th></tr>${STOCK_PRODUCTS.map(p=>`<tr><td>${p.label}</td><td><b>${qty(db.stock[p.key])}</b></td></tr>`).join('')}</table></div>`}
 function stockInputsHTML(){return STOCK_PRODUCTS.map(p=>`<label>${p.label}</label><input id="stk_${p.key}" type="number" min="0" step="${p.step}" value="0" inputmode="decimal">`).join('')}
+function currentStockInputsHTML(){
+ let draft=db.current?.stockUsed||{};
+ return STOCK_PRODUCTS.map(p=>`<label>${p.label}</label><input id="cstk_${p.key}" type="number" min="0" step="${p.step}" value="${draft[p.key]||0}" inputmode="decimal" onchange="saveCurrentStockDraft()">`).join('')
+}
+function saveCurrentStockDraft(){
+ if(!db.current)return;
+ db.current.stockUsed=db.current.stockUsed||{};
+ for(const p of STOCK_PRODUCTS)db.current.stockUsed[p.key]=Number($(`#cstk_${p.key}`)?.value||0);
+ save()
+}
+function validateAndApplyCurrentStock(date,interventionId){
+ if(!db.current||knownClientName(db.current.client)!=="Floriane & Max")return true;
+ saveCurrentStockDraft();
+ let used={},any=false;
+ for(const p of STOCK_PRODUCTS){
+   let v=Number(db.current.stockUsed?.[p.key]||0);
+   if(v<0){alert("Une quantité ne peut pas être négative.");return false}
+   if(v>Number(db.stock[p.key]||0)){alert(`Stock insuffisant pour ${p.label}.`);return false}
+   if(v>0){used[p.key]=v;any=true}
+ }
+ if(any){
+   for(const [k,v] of Object.entries(used))db.stock[k]=Math.max(0,Number(db.stock[k]||0)-v);
+   db.stockLogs.push({id:uid(),date,used,interventionId,client:"Floriane & Max",createdAt:new Date().toISOString()})
+ }
+ return true
+}
 function addStockUsage(){
  let date=$('#stockDate')?.value||today(), used={}, any=false;
  for(const p of STOCK_PRODUCTS){let v=Number($(`#stk_${p.key}`)?.value||0);if(v<0)return alert('Une quantité ne peut pas être négative.');if(v>0){any=true;used[p.key]=v;if(v>Number(db.stock[p.key]||0))return alert(`Stock insuffisant pour ${p.label}.`)}}
@@ -399,11 +425,45 @@ function stockLogText(x){return STOCK_PRODUCTS.filter(p=>Number(x.used?.[p.key]|
 
 function render(){({home,chrono,clients:clientsPage,planning,google,allRecap,clientRecap,payroll,reports,closure,interventions,flomax,settings,workerRecap}[screen]||home)()}
 
-function home(){let it=month(),s=mins(it,'stephanie'),j=mins(it,'jennyfer'),t=totals();layout(`<div class=hero><div class=logo>Steph & Jenny</div><div class=sub>V10 FINALE — STOCK, NOTES ET PDF</div><p>${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</p></div>${db.current?`<div class="card notice"><h2>Chrono en cours</h2><p>${esc(db.current.client)} • ${worker(db.current.worker)}</p><div class=chrono id=t>00:00:00</div><label>Note de l’intervention</label><textarea id=currentNote onchange="saveCurrentNote()">${esc(db.current.note||'')}</textarea><button class="big stop" onclick=stopWork()>⏹ Terminer</button></div>`:`<button class=big onclick="go('chrono')">⏱️ Ouvrir le chronomètre</button>`}<div class=grid><button onclick="go('allRecap')">📋 Récap tous clients</button><button onclick="go('clientRecap')">👤 Récap client</button><button onclick="workerRecap('stephanie')">📄 PDF Stéphanie</button><button onclick="workerRecap('jennyfer')">📄 PDF Jennyfer</button><button onclick="go('reports')">🔁 Reports</button><button onclick="go('closure')">🔒 Clôture mois</button><button onclick="go('interventions')">✏️ Heures & notes</button><button onclick="go('flomax')">🧺 Flo & Max</button><button onclick="go('google')">📅 Google</button></div><div class=card><div class=grid3><div class=stat><strong>${fmin(s)}</strong><span>Stéphanie</span></div><div class=stat><strong>${fmin(j)}</strong><span>Jennyfer</span></div><div class=stat><strong>${machineTotal()}</strong><span>machines</span></div></div></div><div class="card ok"><h3>Montants estimés</h3><p>Stéphanie : <b>${euros(t.es)}</b></p><p>Jennyfer : <b>${euros(t.ej)}</b></p><p>Total : <b>${euros(t.total)}</b></p></div>`);if(db.current)live('t')}
+function upcomingHomePlans(){return (db.planning||[]).filter(p=>!isDonePlan(p)&&planDateTime(p)>=Date.now()-30*60*1000).sort((a,b)=>planDateTime(a)-planDateTime(b)).slice(0,5)}
+function home(){let it=month(),s=mins(it,'stephanie'),j=mins(it,'jennyfer'),t=totals(),up=upcomingHomePlans();let upcoming=`<div class=card><div class=row><h2>Prochains clients</h2><button onclick="go('planning')">Voir le planning</button></div>${up.map(p=>`<div class=item><div class=row><b>${esc(p.client)}</b><span class=pill>${fd(p.date)} ${esc(p.time||'')}</span></div><p>${esc(p.type||'Intervention')}</p><button class=big onclick="startFromPlan('${p.id}')">▶️ Démarrer le chrono</button></div>`).join('')||`<p>Aucun prochain client importé.</p><button onclick="go('google')">📅 Importer depuis Google Agenda</button>`}</div>`;layout(`<div class=hero><div class=logo>Steph & Jenny</div><div class=sub>V10 FINALE — CHRONO, STOCK, NOTES ET PDF</div><p>${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</p></div>${db.current?`<div class="card notice"><h2>Chrono en cours</h2><p>${esc(db.current.client)} • ${worker(db.current.worker)}</p><div class=chrono id=t>00:00:00</div><label>Note de l’intervention</label><textarea id=currentNote onchange="saveCurrentNote()">${esc(db.current.note||'')}</textarea><button class="big stop" onclick=stopWork()>⏹ Terminer</button></div>`:`<button class=big onclick="go('chrono')">⏱️ Ouvrir le chronomètre</button>`}${upcoming}<div class=grid><button onclick="go('allRecap')">📋 Récap tous clients</button><button onclick="go('clientRecap')">👤 Récap client</button><button onclick="workerRecap('stephanie')">📄 PDF Stéphanie</button><button onclick="workerRecap('jennyfer')">📄 PDF Jennyfer</button><button onclick="go('reports')">🔁 Reports</button><button onclick="go('closure')">🔒 Clôture mois</button><button onclick="go('interventions')">✏️ Heures & notes</button><button onclick="go('flomax')">🧺 Flo & Max</button><button onclick="go('google')">📅 Google</button></div><div class=card><div class=grid3><div class=stat><strong>${fmin(s)}</strong><span>Stéphanie</span></div><div class=stat><strong>${fmin(j)}</strong><span>Jennyfer</span></div><div class=stat><strong>${machineTotal()}</strong><span>machines</span></div></div></div><div class="card ok"><h3>Montants estimés</h3><p>Stéphanie : <b>${euros(t.es)}</b></p><p>Jennyfer : <b>${euros(t.ej)}</b></p><p>Total : <b>${euros(t.total)}</b></p></div>`);if(db.current)live('t')}
 function saveCurrentNote(){if(db.current&&$('#currentNote')){db.current.note=$('#currentNote').value;save()}}
-function chrono(){let selected=knownClientName(db.ui?.lastClient)||clients()[0]?.name||'';let opts=clients().map(c=>`<option value="${esc(c.name)}" ${c.name===selected?'selected':''}>${esc(c.name)}</option>`).join('');layout(`<button onclick="go('home')">← Retour</button><h2>Chronomètre</h2>${db.current?`<div class="card notice"><h3>${esc(db.current.client)}</h3><p>${worker(db.current.worker)}</p><div class=chrono id=live>00:00:00</div><label>Note de l’intervention</label><textarea id=currentNote onchange="saveCurrentNote()">${esc(db.current.note||'')}</textarea><button class="big stop" onclick=stopWork()>⏹ Arrêter et enregistrer</button><button onclick=cancelWork()>Annuler</button></div>`:`<div class=card><label>Client</label><select id=cc onchange="rememberChronoClient();showRep();machBox()">${opts}</select><label>Qui ?</label><select id=cw onchange=showRep()><option value=deux>À deux</option><option value=stephanie>Stéphanie seule</option><option value=jennyfer>Jennyfer seule</option></select><div id=rep class="card ok"></div><label>Prestation</label><select id=ct><option>Ménage</option><option>Repassage</option><option>Linge</option></select><div id=chlocbox></div><div id=mb class="card notice"><label>Machines Flo & Max</label><input id=cm type=number value=0></div><label>Note de l’intervention</label><textarea id=cn placeholder="Ex. cuisine, salle de bain, draps changés…"></textarea><button class=big onclick=startChrono()>▶ Démarrer</button></div>`}<div class=card><button class=blue onclick=editInter()>➕ Saisie manuelle</button></div>`);machBox();showRep();if(db.current)live('live')}
-function stopWork(){saveCurrentNote();let end=new Date().toISOString();let obj={...db.current,id:uid(),end,date:db.current.start.slice(0,10),duration:dur(db.current.start,end)};db.interventions.push(obj);if(obj.planId){let p=db.planning.find(x=>x.id===obj.planId);if(p)p.done=true}db.current=null;save();alert('Intervention enregistrée avec sa note.');go('interventions')}
-function startFromPlan(id){let p=db.planning.find(x=>x.id===id);if(!p)return;let c=knownClientName(p.client);db.current={client:c,worker:'deux',type:p.type||'Ménage',machines:0,location:'',note:'',start:new Date().toISOString(),planId:id};save();go('chrono')}
+function chrono(){
+ let selected=knownClientName(db.ui?.lastClient)||clients()[0]?.name||'';
+ let opts=clients().map(c=>`<option value="${esc(c.name)}" ${c.name===selected?'selected':''}>${esc(c.name)}</option>`).join('');
+ let activeStock=db.current&&knownClientName(db.current.client)==='Floriane & Max'?`<div class="card ok"><h3>Produits pris dans la réserve</h3><p class="small">Indique seulement ce que tu as remis pendant cette intervention. Le stock sera déduit quand tu arrêteras le chrono.</p>${currentStockInputsHTML()}</div>`:'';
+ layout(`<button onclick="go('home')">← Retour</button><h2>Chronomètre</h2>
+ ${db.current?`<div class="card notice"><h3>${esc(db.current.client)}</h3><p>${worker(db.current.worker)}</p><div class=chrono id=live>00:00:00</div>
+ <label>Note de l’intervention</label><textarea id=currentNote onchange="saveCurrentNote()" placeholder="Écris ici ce qui a été fait...">${esc(db.current.note||'')}</textarea>
+ ${activeStock}
+ <button class="big stop" onclick=stopWork()>⏹ Arrêter et enregistrer</button><button onclick=cancelWork()>Annuler</button></div>`:
+ `<div class=card><label>Client</label><select id=cc onchange="rememberChronoClient();showRep();machBox()">${opts}</select>
+ <label>Qui ?</label><select id=cw onchange=showRep()><option value=deux>À deux</option><option value=stephanie>Stéphanie seule</option><option value=jennyfer>Jennyfer seule</option></select>
+ <div id=rep class="card ok"></div><label>Prestation</label><select id=ct><option>Ménage</option><option>Repassage</option><option>Linge</option></select>
+ <div id=chlocbox></div><div id=mb class="card notice"><label>Machines Flo & Max</label><input id=cm type=number value=0></div>
+ <label>Note de l’intervention</label><textarea id=cn placeholder="Ex. cuisine, salle de bain, draps changés…"></textarea>
+ <button class=big onclick=startChrono()>▶ Démarrer</button></div>`}
+ <div class=card><button class=blue onclick=editInter()>➕ Saisie manuelle</button></div>`);
+ machBox();showRep();if(db.current)live('live')
+}
+function stopWork(){
+ saveCurrentNote();
+ let end=new Date().toISOString(),date=db.current.start.slice(0,10),interventionId=uid();
+ if(!validateAndApplyCurrentStock(date,interventionId))return;
+ let obj={...db.current,id:interventionId,end,date,duration:dur(db.current.start,end)};
+ delete obj.stockUsed;
+ db.interventions.push(obj);
+ if(obj.planId){let p=db.planning.find(x=>x.id===obj.planId);if(p)p.done=true}
+ db.current=null;save();
+ alert(knownClientName(obj.client)==='Floriane & Max'?'Intervention enregistrée. Les produits indiqués ont été déduits du stock.':'Intervention enregistrée avec sa note.');
+ go('interventions')
+}
+function startFromPlan(id){
+ let p=db.planning.find(x=>x.id===id);if(!p)return;
+ let c=knownClientName(p.client);
+ db.current={client:c,worker:'deux',type:p.type||'Ménage',machines:0,location:'',note:'',stockUsed:c==='Floriane & Max'?{}:undefined,start:new Date().toISOString(),planId:id};
+ save();go('chrono')
+}
 
 function workerRecap(w){
  let title=worker(w), currentLabel=cap(monthLabel(db.month));db.ui=db.ui||{};db.ui.workerRecap=w;save();
@@ -421,6 +481,6 @@ function clientRecap(n){
 
 function flomax(){let list=machineEntries().sort((a,b)=>b.date.localeCompare(a.date)),total=machineTotal(),logs=(db.stockLogs||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));layout(`<button onclick="go('home')">← Retour</button><h2>Flo & Max</h2><div class="card notice"><p>Les machines sont comptabilisées uniquement pour <b>Stéphanie</b>.</p><p>Les produits saisis sont déduits immédiatement du stock.</p></div><div class=card><h3>Ajouter des machines</h3><label>Date</label><input id=mdate type=date value="${today()}"><label>Nombre de machines</label><input id=mcount type=number min=0 value=0><button class=big onclick=addMachineEntry()>💾 Ajouter les machines</button></div><div class=card><h3>Produits utilisés lors d’une intervention</h3><label>Date</label><input id=stockDate type=date value="${today()}">${stockInputsHTML()}<button class=big onclick=addStockUsage()>➖ Déduire du stock</button></div><div class="card ok"><h3>Stock restant actuellement</h3>${stockTableHTML()}</div><div class=card><h3>Historique produits</h3>${logs.map(x=>`<div class=item><div class=row><b>${fd(x.date)}</b><button class=stop onclick="deleteStockUsage('${x.id}')">🗑️</button></div><p>${esc(stockLogText(x))}</p></div>`).join('')||'<p>Aucun produit déduit.</p>'}</div><div class="card ok"><h3>Total machines du mois</h3><p>Machines : <b>${total}</b></p><p>Montant Stéphanie : <b>${euros(total*db.settings.machinePrice)}</b></p></div><div class=card><h3>Historique machines</h3>${list.map(x=>`<div class=item><div class=row><b>${fd(x.date)}</b><span class=pill>${x.count} machine(s)</span></div><p>${x.count} × ${euros(db.settings.machinePrice)} = <b>${euros(x.count*db.settings.machinePrice)}</b></p><button class=stop onclick="deleteMachineEntry('${x.id}')">🗑️ Supprimer</button></div>`).join('')||'<p>Aucune machine ce mois.</p>'}</div><div class=grid><button onclick="clientRecap('Floriane & Max')">📄 Récap fin de mois</button><button onclick=resetStock()>↩️ Réinitialiser stock</button></div>`)}
 
-function settings(){layout(`<button onclick="go('home')">← Retour</button><h2>Réglages</h2><div class="card ok"><p><b>V10 Finale Stock + Notes + PDF séparés</b></p><p>Notes par intervention, PDF Stéphanie/Jennyfer et stock Flo & Max.</p></div><div class=grid><button onclick="workerRecap('stephanie')">📄 PDF Stéphanie</button><button onclick="workerRecap('jennyfer')">📄 PDF Jennyfer</button><button onclick="go('closure')">🔒 Clôture</button><button onclick=exportData()>💾 Sauvegarde</button></div><div class=card><label>Mois affiché</label><input type=month value="${db.month}" onchange="db.month=this.value;save();go('home')"><label>Tarif horaire</label><input type=number value="${db.settings.hourRate}" onchange="db.settings.hourRate=+this.value;save()"><label>Prix machine Flo & Max</label><input type=number step=.01 value="${db.settings.machinePrice}" onchange="db.settings.machinePrice=+this.value;save()"></div><div class=card><button class=big onclick=exportData()>💾 Télécharger sauvegarde</button><label>Restaurer</label><input type=file onchange=importData(event)></div>`)}
+function settings(){layout(`<button onclick="go('home')">← Retour</button><h2>Réglages</h2><div class="card ok"><p><b>V10 Finale — stock pendant le chrono + notes + PDF</b></p><p>Notes par intervention, PDF Stéphanie/Jennyfer et stock Flo & Max.</p></div><div class=grid><button onclick="workerRecap('stephanie')">📄 PDF Stéphanie</button><button onclick="workerRecap('jennyfer')">📄 PDF Jennyfer</button><button onclick="go('closure')">🔒 Clôture</button><button onclick=exportData()>💾 Sauvegarde</button></div><div class=card><label>Mois affiché</label><input type=month value="${db.month}" onchange="db.month=this.value;save();go('home')"><label>Tarif horaire</label><input type=number value="${db.settings.hourRate}" onchange="db.settings.hourRate=+this.value;save()"><label>Prix machine Flo & Max</label><input type=number step=.01 value="${db.settings.machinePrice}" onchange="db.settings.machinePrice=+this.value;save()"></div><div class=card><button class=big onclick=exportData()>💾 Télécharger sauvegarde</button><label>Restaurer</label><input type=file onchange=importData(event)></div>`)}
 
 initFinalFeatures();
