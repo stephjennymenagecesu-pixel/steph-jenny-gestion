@@ -96,14 +96,21 @@ function chrono(){let selected=knownClientName(db.ui?.lastClient)||clients()[0]?
 function live(id){let e=()=>document.getElementById(id);let up=()=>{if(e()&&db.current)e().textContent=hms(Date.now()-new Date(db.current.start).getTime())};up();timer=setInterval(up,1000)}
 function showRep(){if(!$("#rep")||!$("#cc"))return;let c=$("#cc").value,w=$("#cw").value;$("#rep").innerHTML=w==="deux"?`Reports actuels<br>Stéphanie : <b>${rt(getR(c,"stephanie"))}</b><br>Jennyfer : <b>${rt(getR(c,"jennyfer"))}</b>`:`Report ${worker(w)} : <b>${rt(getR(c,w))}</b>`}
 function rememberChronoClient(){if($("#cc")){db.ui=db.ui||{};db.ui.lastClient=$("#cc").value;save()}}
-function machBox(){if($("#mb"))$("#mb").style.display=$("#cc")?.value==="Floriane & Max"?"block":"none";let b=$("#chlocbox");if(b)b.innerHTML=locationSelect($("#cc")?.value,"","chloc")}function startChrono(){let c=knownClientName($("#cc").value);db.ui=db.ui||{};db.ui.lastClient=c;db.current={client:c,worker:$("#cw").value,type:$("#ct").value,machines:c==="Floriane & Max"?(+$("#cm").value||0):0,location:$("#chloc")?.value||"",note:$("#cn").value,start:new Date().toISOString()};save();go("chrono")}
+function machBox(){if($("#mb"))$("#mb").style.display=$("#cc")?.value==="Floriane & Max"?"block":"none";let b=$("#chlocbox");if(b)b.innerHTML=locationSelect($("#cc")?.value,"","chloc")}function startChrono(){
+ let c=knownClientName($('#cc').value);db.ui=db.ui||{};db.ui.lastClient=c;
+ db.current={client:c,worker:$('#cw').value,type:$('#ct').value,machines:c==='Floriane & Max'?(+$('#cm').value||0):0,location:$('#chloc')?.value||'',note:$('#cn').value,
+ stockUsed:c==='Floriane & Max'?{}:undefined,travel:isHeleneName(c)?{stephanieTravel:0,stephanieKm:0,jennyferTravel:0,jennyferKm:0}:undefined,start:new Date().toISOString()};
+ save();go('chrono')
+}
 function cancelWork(){db.current=null;save();go("chrono")}function stopWork(){let end=new Date().toISOString();let obj={...db.current,id:uid(),end,date:db.current.start.slice(0,10),duration:dur(db.current.start,end)};db.interventions.push(obj);if(obj.planId){let p=db.planning.find(x=>x.id===obj.planId);if(p)p.done=true}db.current=null;save();alert("Intervention enregistrée. Le rendez-vous est retiré du planning.");go("interventions")}
 function names(){return [...new Set(month().map(x=>x.client))].sort((a,b)=>a.localeCompare(b))}
 function rowData(n){
  let canonical=knownClientName(n)||n;
  let it=month().filter(x=>sameClient(x.client,canonical));
- let rs=mins(it,"stephanie"),rj=mins(it,"jennyfer"),cs=calc(canonical,"stephanie",rs),cj=calc(canonical,"jennyfer",rj),m=0,rate=client(canonical).rate||db.settings.hourRate;
- return{it,rs,rj,cs,cj,m,rate,totalS:cs.d*rate,totalJ:cj.d*rate,totalM:0,total:(cs.d+cj.d)*rate}
+ let rs=mins(it,'stephanie'),rj=mins(it,'jennyfer'),cs=calc(canonical,'stephanie',rs),cj=calc(canonical,'jennyfer',rj),m=0,rate=client(canonical).rate||db.settings.hourRate;
+ let travelS=travelFor(it,'stephanie'),travelJ=travelFor(it,'jennyfer');
+ let hourS=cs.d*rate,hourJ=cj.d*rate;
+ return{it,rs,rj,cs,cj,m,rate,travelS,travelJ,hourS,hourJ,totalS:hourS+travelS,totalJ:hourJ+travelJ,totalM:0,total:(hourS+travelS)+(hourJ+travelJ)}
 }
 function allRecap(){
  let t=totals(), currentLabel=cap(monthLabel(db.month)), nextLabel=cap(monthLabel(nextM(db.month)));
@@ -170,12 +177,18 @@ function clientRecap(n){
 function reports(){let c=$("#rc")?.value||clients()[0]?.name||"";layout(`<button onclick="go('home')">← Retour</button><h2>Reports à reprendre</h2><div class="card notice"><p>+24 min = 24, à déduire 29 min = -29.</p></div><label>Client</label><select id=rc onchange=reports()>${clients().map(x=>`<option ${x.name===c?"selected":""}>${x.name}</option>`).join("")}</select><div class=card><h3>${c}</h3><label>Report Stéphanie en minutes</label><input id=rs type=number value="${getR(c,"stephanie")}"><label>Report Jennyfer en minutes</label><input id=rj type=number value="${getR(c,"jennyfer")}"><button class=big onclick="saveRep('${c.replaceAll("'","\\'")}')">💾 Enregistrer</button></div>`)}
 function saveRep(c){setR(c,"stephanie",+$("#rs").value||0);setR(c,"jennyfer",+$("#rj").value||0);alert("Reports enregistrés.");reports()}
 function closure(){
- let currentLabel=cap(monthLabel(db.month)), nextLabel=cap(monthLabel(nextM(db.month)));
+ let currentLabel=cap(monthLabel(db.month)),nextLabel=cap(monthLabel(nextM(db.month)));
  let rows=names().map(n=>{
-   let d=rowData(n), closed=isClientClosed(n);
-   return `<div class="item"><div class="row"><b>${n}</b><span class="pill">${closed?"Clôturé":"À clôturer"}</span></div><p>Stéphanie : report vers ${nextLabel} ${rt(d.cs.next)}<br>Jennyfer : report vers ${nextLabel} ${rt(d.cj.next)}</p>${closed?`<button onclick="reopenClient('${n.replaceAll("'","\\'")}')">↩️ Réouvrir</button>`:`<button class="big" onclick="closeOneClient('${n.replaceAll("'","\\'")}')">🔒 Clôturer ${n}</button>`}</div>`
- }).join("");
- layout(`<button onclick="go('home')">← Retour</button><h2>Clôture ${currentLabel}</h2><div class="card notice"><p>Tu peux clôturer un seul client sans toucher aux autres.</p><p>Le report sera préparé pour <b>${nextLabel}</b>.</p></div>${rows||"<div class=card>Aucun client à clôturer.</div>"}<button class="big stop" onclick=closeMonth()>🔒 Clôturer tous les clients restants</button>`)
+   let d=rowData(n),closed=isClientClosed(n),isR=isRichardName(n),rmS=richardMoney(db.month,'stephanie'),rmJ=richardMoney(db.month,'jennyfer');
+   let extra=isR?(closed?`<div class="card ok"><p>Stéphanie : ${moneyBalanceLabel(rmS?.balance||0)}</p><p>Jennyfer : ${moneyBalanceLabel(rmJ?.balance||0)}</p></div>`:
+   `<div class="card notice"><p>Montant à régler ce mois : Stéphanie <b>${euros(d.totalS)}</b> • Jennyfer <b>${euros(d.totalJ)}</b></p><p>Le règlement de Richard doit être saisi séparément pour calculer le reste dû ou l’avance.</p></div>`):'';
+   return `<div class="item"><div class="row"><b>${esc(n)}</b><span class="pill">${closed?'Clôturé':'À clôturer'}</span></div>
+   <p>Stéphanie : report minutes vers ${nextLabel} ${rt(d.cs.next)}<br>Jennyfer : report minutes vers ${nextLabel} ${rt(d.cj.next)}</p>${extra}
+   ${closed?`<button onclick="reopenClient('${n.replaceAll("'","\\'")}')">↩️ Réouvrir</button>`:
+   isR?`<button class="big" onclick="richardClosureForm('${n.replaceAll("'","\\'")}')">💶 Règlement & clôture Richard</button>`:
+   `<button class="big" onclick="closeOneClient('${n.replaceAll("'","\\'")}')">🔒 Clôturer ${esc(n)}</button>`}</div>`
+ }).join('');
+ layout(`<button onclick="go('home')">← Retour</button><h2>Clôture ${currentLabel}</h2><div class="card notice"><p>Tu peux clôturer un seul client sans toucher aux autres.</p><p>Pour Richard, saisis le montant réellement reçu afin de calculer automatiquement le reste dû ou l’avance pour <b>${nextLabel}</b>.</p></div>${rows||'<div class=card>Aucun client à clôturer.</div>'}<button class="big stop" onclick=closeMonth()>🔒 Clôturer tous les autres clients restants</button>`)
 }
 function monthLabel(m){let [y,mo]=m.split("-").map(Number);return new Date(y,mo-1,1).toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}
 function cap(s){return s?s.charAt(0).toUpperCase()+s.slice(1):""}
@@ -194,25 +207,31 @@ function locationSelect(clientName,current="",id="eloc"){
 }
 function nextM(m){let[y,mo]=m.split("-").map(Number);mo++;if(mo==13){mo=1;y++}return y+"-"+pad(mo)}
 function closeOneClient(n,showMessage=true){
- let d=rowData(n), nm=nextM(db.month);
- setR(n,"stephanie",d.cs.next,nm);
- setR(n,"jennyfer",d.cj.next,nm);
+ n=knownClientName(n);
+ if(isRichardName(n)){richardClosureForm(n);return}
+ let d=rowData(n),nm=nextM(db.month);
+ setR(n,'stephanie',d.cs.next,nm);setR(n,'jennyfer',d.cj.next,nm);
  db.closures=db.closures||{};
  db.closures[closureKey(n)]={client:n,month:db.month,nextMonth:nm,closedAt:new Date().toISOString(),reportS:d.cs.next,reportJ:d.cj.next};
  save();
- if(showMessage){alert(n+" est clôturé. Les reports sont prêts pour "+cap(monthLabel(nm))+".");closure()}
+ if(showMessage){alert(n+' est clôturé. Les reports sont prêts pour '+cap(monthLabel(nm))+'.');closure()}
 }
 function reopenClient(n){
- if(!confirm("Réouvrir "+n+" pour ce mois ?"))return;
+ n=knownClientName(n);if(!confirm('Réouvrir '+n+' pour ce mois ?'))return;
  delete db.closures[closureKey(n)];
- save();
- closure();
+ if(isRichardName(n)){
+   let nm=nextM(db.month);delete db.richardMoney?.[richardMoneyKey(db.month,'stephanie')];delete db.richardMoney?.[richardMoneyKey(db.month,'jennyfer')];
+   delete db.richardCarry?.[richardCarryKey(nm,'stephanie')];delete db.richardCarry?.[richardCarryKey(nm,'jennyfer')]
+ }
+ save();closure()
 }
 function closeMonth(){
- if(!confirm("Clôturer tous les clients restants du mois ?"))return;
- names().forEach(n=>{if(!isClientClosed(n))closeOneClient(n,false)});
- alert("Tous les clients du mois sont clôturés.");
- closure();
+ if(!confirm('Clôturer tous les clients restants sauf Richard ?'))return;
+ let richardOpen=false;
+ names().forEach(n=>{if(!isClientClosed(n)){if(isRichardName(n))richardOpen=true;else closeOneClient(n,false)}});
+ save();
+ alert(richardOpen?'Les autres clients sont clôturés. Richard reste à clôturer séparément pour saisir son règlement.':'Tous les clients restants sont clôturés.');
+ closure()
 }
 function clientsPage(){
  let active=db.clients.filter(c=>!c.archived), archived=db.clients.filter(c=>c.archived);
@@ -258,30 +277,47 @@ function deleteClient(id){
 
 function editInter(id){
  let x=id?db.interventions.find(i=>i.id===id):null;
- let selected=x?knownClientName(x.client):(knownClientName(db.ui?.lastClient)||clients()[0]?.name||"");
- let opts=clients().map(c=>`<option value="${c.name}" ${sameClient(selected,c.name)?"selected":""}>${c.name}</option>`).join("");
- layout(`<button onclick="go('interventions')">← Retour</button><h2>Saisie manuelle</h2><input id=eid type=hidden value="${x?.id||""}">
- <label>Client</label><select id=ec onchange="refreshLocation()">${opts}</select>
+ let selected=x?knownClientName(x.client):(knownClientName(db.ui?.lastClient)||clients()[0]?.name||'');
+ let opts=clients().map(c=>`<option value="${esc(c.name)}" ${sameClient(selected,c.name)?'selected':''}>${esc(c.name)}</option>`).join('');
+ layout(`<button onclick="go('interventions')">← Retour</button><h2>Saisie manuelle</h2><input id=eid type=hidden value="${x?.id||''}">
+ <label>Client</label><select id=ec onchange="refreshLocation();refreshTravelManual()">${opts}</select>
  <div id=locbox></div>
  <label>Qui ?</label><select id=ew><option value=deux>À deux</option><option value=stephanie>Stéphanie</option><option value=jennyfer>Jennyfer</option></select>
  <label>Prestation</label><select id=et><option>Ménage</option><option>Repassage</option><option>Linge</option></select>
  <label>Date</label><input id=ed type=date value="${x?.date||today()}">
- <label>Arrivée</label><input id=es type=time value="${x?ft(new Date(x.start)):""}">
- <label>Départ</label><input id=ee type=time value="${x?ft(new Date(x.end)):""}">
- <label>Notes</label><textarea id=en>${x?.note||""}</textarea>
- <button class="big blue" onclick=saveInter()>💾 Enregistrer</button>${x?`<button class="big stop" onclick="delInterFromForm('${x.id}')">🗑️ Supprimer cette intervention</button>`:""}`);
- if(x){$("#ew").value=x.worker;$("#et").value=x.type||"Ménage"}
- refreshLocation(x?.location||"")
+ <label>Arrivée</label><input id=es type=time value="${x?ft(new Date(x.start)):''}">
+ <label>Départ</label><input id=ee type=time value="${x?ft(new Date(x.end)):''}">
+ <div id=manualTravel></div>
+ <label>Notes</label><textarea id=en>${esc(x?.note||'')}</textarea>
+ <button class="big blue" onclick=saveInter()>💾 Enregistrer</button>${x?`<button class="big stop" onclick="delInterFromForm('${x.id}')">🗑️ Supprimer cette intervention</button>`:''}`);
+ if(x){$('#ew').value=x.worker;$('#et').value=x.type||'Ménage'}
+ refreshLocation(x?.location||'');refreshTravelManual(x?.travel)
 }
 function refreshLocation(current=""){let box=$("#locbox");if(!box)return;box.innerHTML=locationSelect($("#ec").value,current)}
+function refreshTravelManual(existing=null){
+ let box=$('#manualTravel');if(!box)return;
+ if(!isHeleneName($('#ec')?.value)){box.innerHTML='';return}
+ let t=existing||{stephanieTravel:0,stephanieKm:0,jennyferTravel:0,jennyferKm:0};
+ box.innerHTML=`<div class="card ok"><h3>Frais Hélène</h3>
+ <h4>Stéphanie</h4><label>Frais de déplacement (€)</label><input id=e_tr_st type=number min=0 step=.01 value="${t.stephanieTravel||0}">
+ <label>Frais kilométriques (€)</label><input id=e_km_st type=number min=0 step=.01 value="${t.stephanieKm||0}">
+ <h4>Jennyfer</h4><label>Frais de déplacement (€)</label><input id=e_tr_je type=number min=0 step=.01 value="${t.jennyferTravel||0}">
+ <label>Frais kilométriques (€)</label><input id=e_km_je type=number min=0 step=.01 value="${t.jennyferKm||0}"></div>`
+}
 function delInterFromForm(id){if(confirm("Supprimer définitivement cette intervention ?")){db.interventions=db.interventions.filter(x=>x.id!==id);save();go("interventions")}}
 function saveInter(){
- let id=$("#eid").value,d=$("#ed").value,s=$("#es").value,e=$("#ee").value;
- if(!d||!s||!e)return alert("Date ou heures manquantes.");
- let st=new Date(`${d}T${s}:00`).toISOString(),en=new Date(`${d}T${e}:00`).toISOString(),cl=$("#ec").value;
- cl=knownClientName(cl);db.ui=db.ui||{};db.ui.lastClient=cl;let o={id:id||uid(),client:cl,worker:$("#ew").value,type:$("#et").value,location:$("#eloc")?.value||"",machines:0,note:$("#en").value,start:st,end:en,date:d,duration:dur(st,en)};
+ let id=$('#eid').value,d=$('#ed').value,s=$('#es').value,e=$('#ee').value;
+ if(!d||!s||!e)return alert('Date ou heures manquantes.');
+ let st=new Date(`${d}T${s}:00`).toISOString(),en=new Date(`${d}T${e}:00`).toISOString(),cl=knownClientName($('#ec').value);
+ db.ui=db.ui||{};db.ui.lastClient=cl;
+ let travel=isHeleneName(cl)?{
+   stephanieTravel:Number($('#e_tr_st')?.value||0),stephanieKm:Number($('#e_km_st')?.value||0),
+   jennyferTravel:Number($('#e_tr_je')?.value||0),jennyferKm:Number($('#e_km_je')?.value||0)
+ }:undefined;
+ let old=id?db.interventions.find(x=>x.id===id):null;
+ let o={...(old||{}),id:id||uid(),client:cl,worker:$('#ew').value,type:$('#et').value,location:$('#eloc')?.value||'',machines:0,note:$('#en').value,travel,start:st,end:en,date:d,duration:dur(st,en)};
  db.interventions=id?db.interventions.map(x=>x.id===id?o:x):[...db.interventions,o];
- save();go("interventions")
+ save();go('interventions')
 }
 function interventions(){let it=month().sort((a,b)=>new Date(b.start)-new Date(a.start));layout(`<button onclick="go('home')">← Retour</button><h2>Modifier heures</h2><button class=big onclick=editInter()>➕ Saisie manuelle</button>${it.map(x=>`<div class=item><div class=row><b>${x.client}</b><span class=pill>${fmin(x.duration)}</span></div><p>${fd(x.date)} • ${ft(new Date(x.start))} → ${ft(new Date(x.end))}<br>${x.location?x.location+" • ":""}${x.type||"Ménage"} • ${worker(x.worker)}</p><div class=grid><button onclick="editInter('${x.id}')">✏️ Modifier</button><button class=stop onclick="delInter('${x.id}')">🗑️ Supprimer</button></div></div>`).join("")||"<div class=card>Aucune intervention.</div>"}`)}
 function delInter(id){if(confirm("Supprimer ?")){db.interventions=db.interventions.filter(x=>x.id!==id);save();interventions()}}
@@ -378,8 +414,10 @@ function initFinalFeatures(){
  db.stock=db.stock||{...INITIAL_STOCK};
  for(const [k,v] of Object.entries(INITIAL_STOCK))if(db.stock[k]===undefined)db.stock[k]=v;
  db.stockLogs=db.stockLogs||[];
+ db.richardCarry=db.richardCarry||{};
+ db.richardMoney=db.richardMoney||{};
  db.interventions=(db.interventions||[]).map(x=>({...x,note:x.note||x.notes||''}));
- db.version='v10-finale-stable-stock-notes-pdf';
+ db.version='v10-finale-richard-helene-reserve';
  save();
 }
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -413,29 +451,128 @@ function validateAndApplyCurrentStock(date,interventionId){
  return true
 }
 function addStockUsage(){
- let date=$('#stockDate')?.value||today(), used={}, any=false;
+ let date=$('#stockDate')?.value||today(),used={},any=false;
  for(const p of STOCK_PRODUCTS){let v=Number($(`#stk_${p.key}`)?.value||0);if(v<0)return alert('Une quantité ne peut pas être négative.');if(v>0){any=true;used[p.key]=v;if(v>Number(db.stock[p.key]||0))return alert(`Stock insuffisant pour ${p.label}.`)}}
  if(!any)return alert('Indique au moins un produit utilisé.');
  for(const [k,v] of Object.entries(used))db.stock[k]=Math.max(0,Number(db.stock[k]||0)-v);
- db.stockLogs.push({id:uid(),date,used,createdAt:new Date().toISOString()});save();alert('Produits déduits du stock.');go('flomax');
+ db.stockLogs.push({id:uid(),date,used,type:'out',createdAt:new Date().toISOString()});save();alert('Produits déduits du stock.');go('flomax')
 }
-function deleteStockUsage(id){let x=db.stockLogs.find(l=>l.id===id);if(!x)return;if(!confirm('Supprimer cette utilisation et remettre les produits dans le stock ?'))return;for(const [k,v] of Object.entries(x.used||{}))db.stock[k]=Number(db.stock[k]||0)+Number(v||0);db.stockLogs=db.stockLogs.filter(l=>l.id!==id);save();go('flomax')}
+function deleteStockUsage(id){deleteStockLog(id)}
 function resetStock(){if(!confirm('Remettre le stock aux quantités de départ indiquées ?'))return;db.stock={...INITIAL_STOCK};db.stockLogs=[];save();go('flomax')}
 function stockLogText(x){return STOCK_PRODUCTS.filter(p=>Number(x.used?.[p.key]||0)>0).map(p=>`${p.label} : ${qty(x.used[p.key])}`).join(' • ')}
+
+
+// ===== CORRECTION RICHARD + HÉLÈNE + RÉSERVE =====
+function isRichardName(n){return clientKey(n)==='richard notheaux'||norm(n).startsWith('richard')}
+function isHeleneName(n){return norm(n).startsWith('helene')}
+function travelObj(x){return x?.travel||{stephanieTravel:0,stephanieKm:0,jennyferTravel:0,jennyferKm:0}}
+function travelFor(items,w){
+ return items.filter(x=>isHeleneName(x.client)&&(x.worker==='deux'||x.worker===w)).reduce((sum,x)=>{
+   let t=travelObj(x);
+   return sum+Number(t[w+'Travel']||0)+Number(t[w+'Km']||0)
+ },0)
+}
+function travelBreakdown(items,w){
+ return items.filter(x=>isHeleneName(x.client)&&(x.worker==='deux'||x.worker===w)).reduce((o,x)=>{
+   let t=travelObj(x);
+   o.travel+=Number(t[w+'Travel']||0);o.km+=Number(t[w+'Km']||0);return o
+ },{travel:0,km:0})
+}
+function currentTravelHTML(){
+ if(!db.current||!isHeleneName(db.current.client))return '';
+ let t=travelObj(db.current);
+ return `<div class="card ok"><h3>Frais Hélène</h3><p class="small">Tu peux ajouter les frais à cette intervention. Ils seront ajoutés au montant de la personne concernée.</p>
+ <h4>Stéphanie</h4><label>Frais de déplacement (€)</label><input id="tr_st" type="number" min="0" step="0.01" value="${t.stephanieTravel||0}" onchange="saveCurrentTravel()">
+ <label>Frais kilométriques (€)</label><input id="km_st" type="number" min="0" step="0.01" value="${t.stephanieKm||0}" onchange="saveCurrentTravel()">
+ <h4>Jennyfer</h4><label>Frais de déplacement (€)</label><input id="tr_je" type="number" min="0" step="0.01" value="${t.jennyferTravel||0}" onchange="saveCurrentTravel()">
+ <label>Frais kilométriques (€)</label><input id="km_je" type="number" min="0" step="0.01" value="${t.jennyferKm||0}" onchange="saveCurrentTravel()"></div>`
+}
+function saveCurrentTravel(){
+ if(!db.current||!isHeleneName(db.current.client))return;
+ db.current.travel={
+   stephanieTravel:Number($('#tr_st')?.value||0),stephanieKm:Number($('#km_st')?.value||0),
+   jennyferTravel:Number($('#tr_je')?.value||0),jennyferKm:Number($('#km_je')?.value||0)
+ };save()
+}
+function richardCarryKey(month,w){return month+'|'+w}
+function richardCarry(month=db.month,w='stephanie'){db.richardCarry=db.richardCarry||{};return Number(db.richardCarry[richardCarryKey(month,w)]||0)}
+function setRichardCarry(month,w,v){db.richardCarry=db.richardCarry||{};db.richardCarry[richardCarryKey(month,w)]=Number(v||0)}
+function richardMoneyKey(month,w){return month+'|'+w}
+function richardMoney(month=db.month,w='stephanie'){db.richardMoney=db.richardMoney||{};return db.richardMoney[richardMoneyKey(month,w)]||null}
+function moneyBalanceLabel(v){
+ v=Number(v||0);
+ if(v<0)return `<b style="color:#b42318">− ${euros(Math.abs(v))} : reste dû</b>`;
+ if(v>0)return `<b style="color:#067647">+ ${euros(v)} : avance à déduire</b>`;
+ return `<b>0,00 € : compte soldé</b>`
+}
+function richardClosureForm(n){
+ n=knownClientName(n);let d=rowData(n),cs=richardCarry(db.month,'stephanie'),cj=richardCarry(db.month,'jennyfer');
+ let oldS=richardMoney(db.month,'stephanie'),oldJ=richardMoney(db.month,'jennyfer');
+ layout(`<button onclick="go('closure')">← Retour</button><h2>Règlement Richard — ${cap(monthLabel(db.month))}</h2>
+ <div class="card notice"><p>Le calcul est séparé pour Stéphanie et Jennyfer.</p><p><b>Solde négatif</b> = Richard doit encore payer. <b>Solde positif</b> = il a versé de l’avance, à déduire le mois suivant.</p></div>
+ <div class=card><h3>Stéphanie</h3><p>Montant des prestations du mois : <b>${euros(d.totalS)}</b></p><p>Solde reporté du mois précédent : ${moneyBalanceLabel(cs)}</p>
+ <label>Montant reçu de Richard (€)</label><input id=rrs type=number min=0 step=.01 value="${oldS?.received||0}" oninput=updateRichardPreview()>
+ <p id=rps></p></div>
+ <div class=card><h3>Jennyfer</h3><p>Montant des prestations du mois : <b>${euros(d.totalJ)}</b></p><p>Solde reporté du mois précédent : ${moneyBalanceLabel(cj)}</p>
+ <label>Montant reçu de Richard (€)</label><input id=rrj type=number min=0 step=.01 value="${oldJ?.received||0}" oninput=updateRichardPreview()>
+ <p id=rpj></p></div>
+ <button class="big" onclick="closeRichardClient('${n.replaceAll("'","\\'")}')">💾 Enregistrer le règlement et clôturer Richard</button>`);
+ updateRichardPreview()
+}
+function updateRichardPreview(){
+ let n=knownClientName('Richard'),d=rowData(n),cs=richardCarry(db.month,'stephanie'),cj=richardCarry(db.month,'jennyfer');
+ let fs=cs+Number($('#rrs')?.value||0)-Number(d.totalS||0),fj=cj+Number($('#rrj')?.value||0)-Number(d.totalJ||0);
+ if($('#rps'))$('#rps').innerHTML='Solde après règlement : '+moneyBalanceLabel(fs);
+ if($('#rpj'))$('#rpj').innerHTML='Solde après règlement : '+moneyBalanceLabel(fj)
+}
+function closeRichardClient(n){
+ n=knownClientName(n);let d=rowData(n),nm=nextM(db.month),rs=Number($('#rrs')?.value||0),rj=Number($('#rrj')?.value||0);
+ let cs=richardCarry(db.month,'stephanie'),cj=richardCarry(db.month,'jennyfer');
+ let fs=cs+rs-Number(d.totalS||0),fj=cj+rj-Number(d.totalJ||0);
+ setR(n,'stephanie',d.cs.next,nm);setR(n,'jennyfer',d.cj.next,nm);
+ setRichardCarry(nm,'stephanie',fs);setRichardCarry(nm,'jennyfer',fj);
+ db.richardMoney=db.richardMoney||{};
+ db.richardMoney[richardMoneyKey(db.month,'stephanie')]={due:Number(d.totalS||0),carryIn:cs,received:rs,balance:fs,nextMonth:nm};
+ db.richardMoney[richardMoneyKey(db.month,'jennyfer')]={due:Number(d.totalJ||0),carryIn:cj,received:rj,balance:fj,nextMonth:nm};
+ db.closures=db.closures||{};
+ db.closures[closureKey(n)]={client:n,month:db.month,nextMonth:nm,closedAt:new Date().toISOString(),reportS:d.cs.next,reportJ:d.cj.next,richard:true,balanceS:fs,balanceJ:fj};
+ save();alert('Richard est clôturé. Les soldes en euros sont reportés sur '+cap(monthLabel(nm))+'.');closure()
+}
+function stockAddInputsHTML(){return STOCK_PRODUCTS.map(p=>`<label>${p.label}</label><input id="add_${p.key}" type="number" min="0" step="${p.step}" value="0" inputmode="decimal">`).join('')}
+function addStockSupply(){
+ let date=$('#addStockDate')?.value||today(),added={},any=false;
+ for(const p of STOCK_PRODUCTS){let v=Number($(`#add_${p.key}`)?.value||0);if(v<0)return alert('Une quantité ne peut pas être négative.');if(v>0){added[p.key]=v;any=true}}
+ if(!any)return alert('Indique au moins un produit à ajouter.');
+ for(const [k,v] of Object.entries(added))db.stock[k]=Number(db.stock[k]||0)+v;
+ db.stockLogs=db.stockLogs||[];db.stockLogs.push({id:uid(),date,added,type:'in',createdAt:new Date().toISOString()});save();alert('Produits ajoutés à la réserve.');go('flomax')
+}
+function deleteStockLog(id){
+ let x=(db.stockLogs||[]).find(l=>l.id===id);if(!x)return;
+ let isIn=!!x.added;
+ if(!confirm(isIn?'Supprimer cette entrée de stock ? Les quantités ajoutées seront retirées.':'Supprimer cette utilisation ? Les produits seront remis dans le stock.'))return;
+ if(isIn){for(const [k,v] of Object.entries(x.added||{}))db.stock[k]=Math.max(0,Number(db.stock[k]||0)-Number(v||0))}
+ else{for(const [k,v] of Object.entries(x.used||{}))db.stock[k]=Number(db.stock[k]||0)+Number(v||0)}
+ db.stockLogs=db.stockLogs.filter(l=>l.id!==id);save();go('flomax')
+}
+function stockLogText2(x){
+ let obj=x.added||x.used||{},sign=x.added?'+':'−';
+ return STOCK_PRODUCTS.filter(p=>Number(obj[p.key]||0)>0).map(p=>`${sign} ${p.label} : ${qty(obj[p.key])}`).join(' • ')
+}
 
 function render(){({home,chrono,clients:clientsPage,planning,google,allRecap,clientRecap,payroll,reports,closure,interventions,flomax,settings,workerRecap}[screen]||home)()}
 
 function upcomingHomePlans(){return (db.planning||[]).filter(p=>!isDonePlan(p)&&planDateTime(p)>=Date.now()-30*60*1000).sort((a,b)=>planDateTime(a)-planDateTime(b)).slice(0,5)}
-function home(){let it=month(),s=mins(it,'stephanie'),j=mins(it,'jennyfer'),t=totals(),up=upcomingHomePlans();let upcoming=`<div class=card><div class=row><h2>Prochains clients</h2><button onclick="go('planning')">Voir le planning</button></div>${up.map(p=>`<div class=item><div class=row><b>${esc(p.client)}</b><span class=pill>${fd(p.date)} ${esc(p.time||'')}</span></div><p>${esc(p.type||'Intervention')}</p><button class=big onclick="startFromPlan('${p.id}')">▶️ Démarrer le chrono</button></div>`).join('')||`<p>Aucun prochain client importé.</p><button onclick="go('google')">📅 Importer depuis Google Agenda</button>`}</div>`;layout(`<div class=hero><div class=logo>Steph & Jenny</div><div class=sub>V10 FINALE — CHRONO, STOCK, NOTES ET PDF</div><p>${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</p></div>${db.current?`<div class="card notice"><h2>Chrono en cours</h2><p>${esc(db.current.client)} • ${worker(db.current.worker)}</p><div class=chrono id=t>00:00:00</div><label>Note de l’intervention</label><textarea id=currentNote onchange="saveCurrentNote()">${esc(db.current.note||'')}</textarea><button class="big stop" onclick=stopWork()>⏹ Terminer</button></div>`:`<button class=big onclick="go('chrono')">⏱️ Ouvrir le chronomètre</button>`}${upcoming}<div class=grid><button onclick="go('allRecap')">📋 Récap tous clients</button><button onclick="go('clientRecap')">👤 Récap client</button><button onclick="workerRecap('stephanie')">📄 PDF Stéphanie</button><button onclick="workerRecap('jennyfer')">📄 PDF Jennyfer</button><button onclick="go('reports')">🔁 Reports</button><button onclick="go('closure')">🔒 Clôture mois</button><button onclick="go('interventions')">✏️ Heures & notes</button><button onclick="go('flomax')">🧺 Flo & Max</button><button onclick="go('google')">📅 Google</button></div><div class=card><div class=grid3><div class=stat><strong>${fmin(s)}</strong><span>Stéphanie</span></div><div class=stat><strong>${fmin(j)}</strong><span>Jennyfer</span></div><div class=stat><strong>${machineTotal()}</strong><span>machines</span></div></div></div><div class="card ok"><h3>Montants estimés</h3><p>Stéphanie : <b>${euros(t.es)}</b></p><p>Jennyfer : <b>${euros(t.ej)}</b></p><p>Total : <b>${euros(t.total)}</b></p></div>`);if(db.current)live('t')}
+function home(){let it=month(),s=mins(it,'stephanie'),j=mins(it,'jennyfer'),t=totals(),up=upcomingHomePlans();let upcoming=`<div class=card><div class=row><h2>Prochains clients</h2><button onclick="go('planning')">Voir le planning</button></div>${up.map(p=>`<div class=item><div class=row><b>${esc(p.client)}</b><span class=pill>${fd(p.date)} ${esc(p.time||'')}</span></div><p>${esc(p.type||'Intervention')}</p><button class=big onclick="startFromPlan('${p.id}')">▶️ Démarrer le chrono</button></div>`).join('')||`<p>Aucun prochain client importé.</p><button onclick="go('google')">📅 Importer depuis Google Agenda</button>`}</div>`;layout(`<div class=hero><div class=logo>Steph & Jenny</div><div class=sub>V10 FINALE — RICHARD, HÉLÈNE, RÉSERVE</div><p>${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</p></div>${db.current?`<div class="card notice"><h2>Chrono en cours</h2><p>${esc(db.current.client)} • ${worker(db.current.worker)}</p><div class=chrono id=t>00:00:00</div><label>Note de l’intervention</label><textarea id=currentNote onchange="saveCurrentNote()">${esc(db.current.note||'')}</textarea><button class="big stop" onclick=stopWork()>⏹ Terminer</button></div>`:`<button class=big onclick="go('chrono')">⏱️ Ouvrir le chronomètre</button>`}${upcoming}<div class=grid><button onclick="go('allRecap')">📋 Récap tous clients</button><button onclick="go('clientRecap')">👤 Récap client</button><button onclick="workerRecap('stephanie')">📄 PDF Stéphanie</button><button onclick="workerRecap('jennyfer')">📄 PDF Jennyfer</button><button onclick="go('reports')">🔁 Reports</button><button onclick="go('closure')">🔒 Clôture mois</button><button onclick="go('interventions')">✏️ Heures & notes</button><button onclick="go('flomax')">🧺 Flo & Max</button><button onclick="go('google')">📅 Google</button></div><div class=card><div class=grid3><div class=stat><strong>${fmin(s)}</strong><span>Stéphanie</span></div><div class=stat><strong>${fmin(j)}</strong><span>Jennyfer</span></div><div class=stat><strong>${machineTotal()}</strong><span>machines</span></div></div></div><div class="card ok"><h3>Montants estimés</h3><p>Stéphanie : <b>${euros(t.es)}</b></p><p>Jennyfer : <b>${euros(t.ej)}</b></p><p>Total : <b>${euros(t.total)}</b></p></div>`);if(db.current)live('t')}
 function saveCurrentNote(){if(db.current&&$('#currentNote')){db.current.note=$('#currentNote').value;save()}}
 function chrono(){
  let selected=knownClientName(db.ui?.lastClient)||clients()[0]?.name||'';
  let opts=clients().map(c=>`<option value="${esc(c.name)}" ${c.name===selected?'selected':''}>${esc(c.name)}</option>`).join('');
- let activeStock=db.current&&knownClientName(db.current.client)==='Floriane & Max'?`<div class="card ok"><h3>Produits pris dans la réserve</h3><p class="small">Indique seulement ce que tu as remis pendant cette intervention. Le stock sera déduit quand tu arrêteras le chrono.</p>${currentStockInputsHTML()}</div>`:'';
+ let activeStock=db.current&&knownClientName(db.current.client)==='Floriane & Max'?`<div class="card ok"><h3>Produits pris dans la réserve</h3><p class="small">Indique ce que tu as utilisé. Le stock sera déduit quand tu arrêteras le chrono.</p>${currentStockInputsHTML()}</div>`:'';
+ let activeTravel=currentTravelHTML();
  layout(`<button onclick="go('home')">← Retour</button><h2>Chronomètre</h2>
  ${db.current?`<div class="card notice"><h3>${esc(db.current.client)}</h3><p>${worker(db.current.worker)}</p><div class=chrono id=live>00:00:00</div>
  <label>Note de l’intervention</label><textarea id=currentNote onchange="saveCurrentNote()" placeholder="Écris ici ce qui a été fait...">${esc(db.current.note||'')}</textarea>
- ${activeStock}
+ ${activeStock}${activeTravel}
  <button class="big stop" onclick=stopWork()>⏹ Arrêter et enregistrer</button><button onclick=cancelWork()>Annuler</button></div>`:
  `<div class=card><label>Client</label><select id=cc onchange="rememberChronoClient();showRep();machBox()">${opts}</select>
  <label>Qui ?</label><select id=cw onchange=showRep()><option value=deux>À deux</option><option value=stephanie>Stéphanie seule</option><option value=jennyfer>Jennyfer seule</option></select>
@@ -447,7 +584,7 @@ function chrono(){
  machBox();showRep();if(db.current)live('live')
 }
 function stopWork(){
- saveCurrentNote();
+ saveCurrentNote();saveCurrentTravel();
  let end=new Date().toISOString(),date=db.current.start.slice(0,10),interventionId=uid();
  if(!validateAndApplyCurrentStock(date,interventionId))return;
  let obj={...db.current,id:interventionId,end,date,duration:dur(db.current.start,end)};
@@ -455,13 +592,14 @@ function stopWork(){
  db.interventions.push(obj);
  if(obj.planId){let p=db.planning.find(x=>x.id===obj.planId);if(p)p.done=true}
  db.current=null;save();
- alert(knownClientName(obj.client)==='Floriane & Max'?'Intervention enregistrée. Les produits indiqués ont été déduits du stock.':'Intervention enregistrée avec sa note.');
+ alert(knownClientName(obj.client)==='Floriane & Max'?'Intervention enregistrée. Les produits indiqués ont été déduits du stock.':'Intervention enregistrée.');
  go('interventions')
 }
 function startFromPlan(id){
  let p=db.planning.find(x=>x.id===id);if(!p)return;
  let c=knownClientName(p.client);
- db.current={client:c,worker:'deux',type:p.type||'Ménage',machines:0,location:'',note:'',stockUsed:c==='Floriane & Max'?{}:undefined,start:new Date().toISOString(),planId:id};
+ db.current={client:c,worker:'deux',type:p.type||'Ménage',machines:0,location:'',note:'',stockUsed:c==='Floriane & Max'?{}:undefined,
+ travel:isHeleneName(c)?{stephanieTravel:0,stephanieKm:0,jennyferTravel:0,jennyferKm:0}:undefined,start:new Date().toISOString(),planId:id};
  save();go('chrono')
 }
 
@@ -474,13 +612,41 @@ function workerRecap(w){
 function payroll(){workerRecap(db.ui?.workerRecap||'stephanie')}
 
 function clientRecap(n){
- n=knownClientName(n||db.ui?.recapClient||clients()[0]?.name)||clients()[0]?.name;db.ui=db.ui||{};db.ui.recapClient=n;save();let d=rowData(n),isFM=n==='Floriane & Max',mach=isFM?machineTotal():0,machAmount=isFM?machineAmount():0,stephTotal=d.totalS+machAmount,currentLabel=cap(monthLabel(db.month)),nextLabel=cap(monthLabel(nextM(db.month)));
+ n=knownClientName(n||db.ui?.recapClient||clients()[0]?.name)||clients()[0]?.name;db.ui=db.ui||{};db.ui.recapClient=n;save();
+ let d=rowData(n),isFM=n==='Floriane & Max',isH=isHeleneName(n),isR=isRichardName(n),mach=isFM?machineTotal():0,machAmount=isFM?machineAmount():0,stephTotal=d.totalS+machAmount,currentLabel=cap(monthLabel(db.month)),nextLabel=cap(monthLabel(nextM(db.month)));
  let detailRows=d.it.map(x=>`<tr><td>${fd(x.date)}</td><td>${esc(x.location||'-')}</td><td>${esc(x.type||'Ménage')}</td><td>${ft(new Date(x.start))}</td><td>${ft(new Date(x.end))}</td><td>${fmin(x.duration)}</td><td>${worker(x.worker)}</td><td>${esc(x.note||'-')}</td></tr>`).join('')||'<tr><td colspan=8>Aucune intervention.</td></tr>';
- layout(`<button class=noPrint onclick="go('home')">← Retour</button><div class=hero><div class=logo>Steph & Jenny</div><div class=sub>RÉCAPITULATIF & FACTURATION</div><p><b>${currentLabel}</b></p></div><label class=noPrint>Client</label><select class=noPrint onchange="clientRecap(this.value)">${clients().map(c=>`<option value="${esc(c.name)}" ${c.name===n?'selected':''}>${esc(c.name)}</option>`).join('')}</select><div class=card><div class=row><h2>${esc(n)}</h2><span class=pill>${isClientClosed(n)?'Clôturé':'En cours'}</span></div><div class=tableWrap><table><tr><th>Date</th><th>Lieu</th><th>Prestation</th><th>Arrivée</th><th>Départ</th><th>Durée</th><th>Qui</th><th>Note</th></tr>${detailRows}</table></div><h3>Stéphanie</h3><p>Temps réel : <b>${fmin(d.rs)}</b></p><p>Report début ${currentLabel} : <b>${rt(d.cs.rep)}</b></p><p>À déclarer : <b>${d.cs.d}h</b></p><p>Report fin vers ${nextLabel} : <b>${rt(d.cs.next)}</b></p><p>Montant heures : <b>${euros(d.totalS)}</b></p>${isFM?`<div class="card ok"><h3>Machines du mois</h3>${machineRowsHTML()}<p><b>Total machines : ${mach} = ${euros(machAmount)}</b></p><h3>Stock restant</h3>${stockTableHTML()}<p><b>Total Stéphanie : ${euros(stephTotal)}</b></p></div>`:''}<h3>Jennyfer</h3><p>Temps réel : <b>${fmin(d.rj)}</b></p><p>Report début ${currentLabel} : <b>${rt(d.cj.rep)}</b></p><p>À déclarer : <b>${d.cj.d}h</b></p><p>Report fin vers ${nextLabel} : <b>${rt(d.cj.next)}</b></p><p>Montant : <b>${euros(d.totalJ)}</b></p></div><div class="grid noPrint"><button onclick="closeOneClient('${n.replaceAll("'","\\'")}')">🔒 Clôturer ce client</button><button onclick=window.print()>🖨️ PDF</button></div>`)
+ let hs=travelBreakdown(d.it,'stephanie'),hj=travelBreakdown(d.it,'jennyfer');
+ let rS=richardMoney(db.month,'stephanie'),rJ=richardMoney(db.month,'jennyfer'),carryS=richardCarry(db.month,'stephanie'),carryJ=richardCarry(db.month,'jennyfer');
+ let richardBox=isR?`<div class="card notice"><h3>Solde Richard en euros</h3>
+ <p>Stéphanie — solde venant du mois précédent : ${moneyBalanceLabel(carryS)}</p>${rS?`<p>Reçu : <b>${euros(rS.received)}</b> • Solde de clôture : ${moneyBalanceLabel(rS.balance)}</p>`:''}
+ <p>Jennyfer — solde venant du mois précédent : ${moneyBalanceLabel(carryJ)}</p>${rJ?`<p>Reçu : <b>${euros(rJ.received)}</b> • Solde de clôture : ${moneyBalanceLabel(rJ.balance)}</p>`:''}</div>`:'';
+ layout(`<button class=noPrint onclick="go('home')">← Retour</button><div class=hero><div class=logo>Steph & Jenny</div><div class=sub>RÉCAPITULATIF & FACTURATION</div><p><b>${currentLabel}</b></p></div>
+ <label class=noPrint>Client</label><select class=noPrint onchange="clientRecap(this.value)">${clients().map(c=>`<option value="${esc(c.name)}" ${c.name===n?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
+ <div class=card><div class=row><h2>${esc(n)}</h2><span class=pill>${isClientClosed(n)?'Clôturé':'En cours'}</span></div>
+ <div class=tableWrap><table><tr><th>Date</th><th>Lieu</th><th>Prestation</th><th>Arrivée</th><th>Départ</th><th>Durée</th><th>Qui</th><th>Note</th></tr>${detailRows}</table></div>
+ ${richardBox}
+ <h3>Stéphanie</h3><p>Temps réel : <b>${fmin(d.rs)}</b></p><p>Report début ${currentLabel} : <b>${rt(d.cs.rep)}</b></p><p>À déclarer : <b>${d.cs.d}h</b></p><p>Report fin vers ${nextLabel} : <b>${rt(d.cs.next)}</b></p>
+ <p>Montant heures : <b>${euros(d.hourS)}</b></p>${isH?`<p>Frais déplacement : <b>${euros(hs.travel)}</b><br>Frais kilométriques : <b>${euros(hs.km)}</b><br><b>Total Stéphanie : ${euros(d.totalS)}</b></p>`:''}
+ ${isFM?`<div class="card ok"><h3>Machines du mois</h3>${machineRowsHTML()}<p><b>Total machines : ${mach} = ${euros(machAmount)}</b></p><h3>Stock restant</h3>${stockTableHTML()}<p><b>Total Stéphanie : ${euros(stephTotal)}</b></p></div>`:''}
+ <h3>Jennyfer</h3><p>Temps réel : <b>${fmin(d.rj)}</b></p><p>Report début ${currentLabel} : <b>${rt(d.cj.rep)}</b></p><p>À déclarer : <b>${d.cj.d}h</b></p><p>Report fin vers ${nextLabel} : <b>${rt(d.cj.next)}</b></p>
+ <p>Montant heures : <b>${euros(d.hourJ)}</b></p>${isH?`<p>Frais déplacement : <b>${euros(hj.travel)}</b><br>Frais kilométriques : <b>${euros(hj.km)}</b><br><b>Total Jennyfer : ${euros(d.totalJ)}</b></p>`:`<p>Montant : <b>${euros(d.totalJ)}</b></p>`}</div>
+ <div class="grid noPrint">${isR&&!isClientClosed(n)?`<button onclick="richardClosureForm('${n.replaceAll("'","\\'")}')">💶 Règlement Richard</button>`:`<button onclick="closeOneClient('${n.replaceAll("'","\\'")}')">🔒 Clôturer ce client</button>`}<button onclick=window.print()>🖨️ PDF</button></div>`)
 }
 
-function flomax(){let list=machineEntries().sort((a,b)=>b.date.localeCompare(a.date)),total=machineTotal(),logs=(db.stockLogs||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));layout(`<button onclick="go('home')">← Retour</button><h2>Flo & Max</h2><div class="card notice"><p>Les machines sont comptabilisées uniquement pour <b>Stéphanie</b>.</p><p>Les produits saisis sont déduits immédiatement du stock.</p></div><div class=card><h3>Ajouter des machines</h3><label>Date</label><input id=mdate type=date value="${today()}"><label>Nombre de machines</label><input id=mcount type=number min=0 value=0><button class=big onclick=addMachineEntry()>💾 Ajouter les machines</button></div><div class=card><h3>Produits utilisés lors d’une intervention</h3><label>Date</label><input id=stockDate type=date value="${today()}">${stockInputsHTML()}<button class=big onclick=addStockUsage()>➖ Déduire du stock</button></div><div class="card ok"><h3>Stock restant actuellement</h3>${stockTableHTML()}</div><div class=card><h3>Historique produits</h3>${logs.map(x=>`<div class=item><div class=row><b>${fd(x.date)}</b><button class=stop onclick="deleteStockUsage('${x.id}')">🗑️</button></div><p>${esc(stockLogText(x))}</p></div>`).join('')||'<p>Aucun produit déduit.</p>'}</div><div class="card ok"><h3>Total machines du mois</h3><p>Machines : <b>${total}</b></p><p>Montant Stéphanie : <b>${euros(total*db.settings.machinePrice)}</b></p></div><div class=card><h3>Historique machines</h3>${list.map(x=>`<div class=item><div class=row><b>${fd(x.date)}</b><span class=pill>${x.count} machine(s)</span></div><p>${x.count} × ${euros(db.settings.machinePrice)} = <b>${euros(x.count*db.settings.machinePrice)}</b></p><button class=stop onclick="deleteMachineEntry('${x.id}')">🗑️ Supprimer</button></div>`).join('')||'<p>Aucune machine ce mois.</p>'}</div><div class=grid><button onclick="clientRecap('Floriane & Max')">📄 Récap fin de mois</button><button onclick=resetStock()>↩️ Réinitialiser stock</button></div>`)}
+function flomax(){
+ let list=machineEntries().sort((a,b)=>b.date.localeCompare(a.date)),total=machineTotal(),logs=(db.stockLogs||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+ layout(`<button onclick="go('home')">← Retour</button><h2>Flo & Max</h2>
+ <div class="card notice"><p>Les machines sont comptabilisées uniquement pour <b>Stéphanie</b>.</p><p>Tu peux maintenant <b>ajouter</b> les produits achetés à la réserve et <b>déduire</b> ceux utilisés.</p></div>
+ <div class=card><h3>Ajouter des machines</h3><label>Date</label><input id=mdate type=date value="${today()}"><label>Nombre de machines</label><input id=mcount type=number min=0 value=0><button class=big onclick=addMachineEntry()>💾 Ajouter les machines</button></div>
+ <div class="card ok"><h3>➕ Ajouter des produits à la réserve</h3><label>Date</label><input id=addStockDate type=date value="${today()}">${stockAddInputsHTML()}<button class=big onclick=addStockSupply()>➕ Ajouter au stock</button></div>
+ <div class=card><h3>➖ Produits utilisés / pris dans la réserve</h3><label>Date</label><input id=stockDate type=date value="${today()}">${stockInputsHTML()}<button class=big onclick=addStockUsage()>➖ Déduire du stock</button></div>
+ <div class="card ok"><h3>Stock restant actuellement</h3>${stockTableHTML()}</div>
+ <div class=card><h3>Historique réserve</h3>${logs.map(x=>`<div class=item><div class=row><b>${fd(x.date)}</b><span class=pill>${x.added?'Entrée':'Sortie'}</span></div><p>${esc(stockLogText2(x))}</p><button class=stop onclick="deleteStockLog('${x.id}')">🗑️ Supprimer</button></div>`).join('')||'<p>Aucun mouvement de stock.</p>'}</div>
+ <div class="card ok"><h3>Total machines du mois</h3><p>Machines : <b>${total}</b></p><p>Montant Stéphanie : <b>${euros(total*db.settings.machinePrice)}</b></p></div>
+ <div class=card><h3>Historique machines</h3>${list.map(x=>`<div class=item><div class=row><b>${fd(x.date)}</b><span class=pill>${x.count} machine(s)</span></div><p>${x.count} × ${euros(db.settings.machinePrice)} = <b>${euros(x.count*db.settings.machinePrice)}</b></p><button class=stop onclick="deleteMachineEntry('${x.id}')">🗑️ Supprimer</button></div>`).join('')||'<p>Aucune machine ce mois.</p>'}</div>
+ <div class=grid><button onclick="clientRecap('Floriane & Max')">📄 Récap fin de mois</button><button onclick=resetStock()>↩️ Réinitialiser stock</button></div>`)
+}
 
-function settings(){layout(`<button onclick="go('home')">← Retour</button><h2>Réglages</h2><div class="card ok"><p><b>V10 Finale — stock pendant le chrono + notes + PDF</b></p><p>Notes par intervention, PDF Stéphanie/Jennyfer et stock Flo & Max.</p></div><div class=grid><button onclick="workerRecap('stephanie')">📄 PDF Stéphanie</button><button onclick="workerRecap('jennyfer')">📄 PDF Jennyfer</button><button onclick="go('closure')">🔒 Clôture</button><button onclick=exportData()>💾 Sauvegarde</button></div><div class=card><label>Mois affiché</label><input type=month value="${db.month}" onchange="db.month=this.value;save();go('home')"><label>Tarif horaire</label><input type=number value="${db.settings.hourRate}" onchange="db.settings.hourRate=+this.value;save()"><label>Prix machine Flo & Max</label><input type=number step=.01 value="${db.settings.machinePrice}" onchange="db.settings.machinePrice=+this.value;save()"></div><div class=card><button class=big onclick=exportData()>💾 Télécharger sauvegarde</button><label>Restaurer</label><input type=file onchange=importData(event)></div>`)}
+function settings(){layout(`<button onclick="go('home')">← Retour</button><h2>Réglages</h2><div class="card ok"><p><b>V10 Finale — Richard, frais Hélène, réserve +/−</b></p><p>Notes par intervention, PDF Stéphanie/Jennyfer et stock Flo & Max.</p></div><div class=grid><button onclick="workerRecap('stephanie')">📄 PDF Stéphanie</button><button onclick="workerRecap('jennyfer')">📄 PDF Jennyfer</button><button onclick="go('closure')">🔒 Clôture</button><button onclick=exportData()>💾 Sauvegarde</button></div><div class=card><label>Mois affiché</label><input type=month value="${db.month}" onchange="db.month=this.value;save();go('home')"><label>Tarif horaire</label><input type=number value="${db.settings.hourRate}" onchange="db.settings.hourRate=+this.value;save()"><label>Prix machine Flo & Max</label><input type=number step=.01 value="${db.settings.machinePrice}" onchange="db.settings.machinePrice=+this.value;save()"></div><div class=card><button class=big onclick=exportData()>💾 Télécharger sauvegarde</button><label>Restaurer</label><input type=file onchange=importData(event)></div>`)}
 
 initFinalFeatures();

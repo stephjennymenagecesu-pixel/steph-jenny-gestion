@@ -1,6 +1,9 @@
-# V10 Finale — correction chrono Flo & Max
+# Steph & Jenny — V10 Finale correction Richard / Hélène / réserve
 
-- Quand le chrono Flo & Max est démarré depuis le planning, l'encadré des produits de réserve apparaît immédiatement.
-- Les quantités saisies sont déduites automatiquement du stock à l'arrêt du chrono.
-- La note d'intervention reste visible et modifiable pendant tout le chrono.
-- Le détail du stock reste disponible dans le récapitulatif de fin de mois.
+Cette version conserve la clé localStorage existante `sj_v10_complete_data`.
+
+Ajouts :
+- Richard : règlement séparé Stéphanie/Jennyfer à la clôture, solde négatif = reste dû, solde positif = avance ; report automatique sur le mois suivant.
+- Hélène : frais de déplacement et frais kilométriques séparés pour Stéphanie et Jennyfer, depuis le chrono ou une saisie manuelle.
+- Flo & Max : ajout de produits à la réserve en plus des déductions, avec historique des entrées/sorties.
+- Notes et déductions de stock pendant le chrono conservées.
