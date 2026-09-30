@@ -383,94 +383,264 @@ if(
       });
   },1200);
 }
-/* CORRECTION PDF IPHONE / PWA */
-const sjNativePrint = window.print.bind(window);
+/* PDF DIRECT IPHONE / PWA */
 
-window.print = function(){
+async function sjClientPDF(){
+
   try{
-    const main = document.querySelector("main.app");
 
-    if(!main){
-      sjNativePrint();
+    if(!window.jspdf?.jsPDF){
+      alert("Le module PDF n'est pas encore chargé. Ferme puis rouvre l'application.");
       return;
     }
 
-    const copie = main.cloneNode(true);
+    const { jsPDF } = window.jspdf;
 
-    copie
-      .querySelectorAll(".nav,.noPrint,button,select,label")
-      .forEach(el => el.remove());
-
-    const fenetre = window.open("", "_blank");
-
-    if(!fenetre){
-      alert(
-        "Le PDF n'a pas pu s'ouvrir. Ouvre l'application dans Safari puis réessaie."
+    const n =
+      knownClientName(
+        db.ui?.recapClient ||
+        clients()[0]?.name
       );
+
+    if(!n){
+      alert("Aucun client sélectionné.");
       return;
     }
 
-    const css =
-      new URL("styles.css", window.location.href).href;
+    const d = rowData(n);
 
-    fenetre.document.open();
+    const pdf = new jsPDF({
+      unit: "mm",
+      format: "a4"
+    });
 
-    fenetre.document.write(`
-      <!doctype html>
-      <html lang="fr">
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport"
-              content="width=device-width,initial-scale=1">
-        <title>Steph & Jenny - Récapitulatif</title>
+    let y = 18;
 
-        <link rel="stylesheet" href="${css}">
+    const ligne = (texte, taille=11, gras=false) => {
 
-        <style>
-          body{
-            background:white !important;
-            padding:20px;
-          }
+      if(y > 280){
+        pdf.addPage();
+        y = 18;
+      }
 
-          main.app{
-            max-width:900px;
-            margin:auto;
-          }
+      pdf.setFontSize(taille);
+      pdf.setFont(
+        "helvetica",
+        gras ? "bold" : "normal"
+      );
 
-          .nav,
-          .noPrint,
-          button,
-          select,
-          label{
-            display:none !important;
-          }
+      const lignes =
+        pdf.splitTextToSize(
+          String(texte),
+          180
+        );
 
-          @media print{
-            body{
-              background:white !important;
-            }
-          }
-        </style>
-      </head>
+      pdf.text(lignes, 15, y);
 
-      <body>
-        ${copie.outerHTML}
-      </body>
-      </html>
-    `);
+      y += lignes.length * 6;
+    };
 
-    fenetre.document.close();
+    ligne("Steph & Jenny", 18, true);
+    ligne("RÉCAPITULATIF & FACTURATION", 12, true);
 
-    setTimeout(()=>{
-      fenetre.focus();
-      fenetre.print();
-    },700);
+    ligne(
+      cap(monthLabel(db.month)),
+      12,
+      true
+    );
+
+    y += 3;
+
+    ligne(n, 16, true);
+
+    if(isClientClosed(n)){
+      ligne("Clôturé", 10, true);
+    }
+
+    y += 4;
+
+    ligne("Interventions", 13, true);
+
+    d.it
+      .slice()
+      .sort((a,b)=>a.date.localeCompare(b.date))
+      .forEach(x=>{
+
+        const debut =
+          ft(new Date(x.start));
+
+        const fin =
+          ft(new Date(x.end));
+
+        ligne(
+          fd(x.date) +
+          "  •  " +
+          debut +
+          " - " +
+          fin +
+          "  •  " +
+          fmin(x.duration) +
+          "  •  " +
+          (x.type || "Ménage"),
+          10
+        );
+      });
+
+    y += 4;
+
+    ligne("Stéphanie", 14, true);
+
+    ligne(
+      "Temps réel : " +
+      fmin(d.rs)
+    );
+
+    ligne(
+      "Report début " +
+      cap(monthLabel(db.month)) +
+      " : " +
+      rt(d.cs.rep)
+    );
+
+    ligne(
+      "À déclarer : " +
+      d.cs.d +
+      " h"
+    );
+
+    ligne(
+      "Report fin vers " +
+      cap(monthLabel(nextM(db.month))) +
+      " : " +
+      rt(d.cs.next)
+    );
+
+    ligne(
+      "Montant : " +
+      euros(d.totalS),
+      11,
+      true
+    );
+
+    y += 4;
+
+    ligne("Jennyfer", 14, true);
+
+    ligne(
+      "Temps réel : " +
+      fmin(d.rj)
+    );
+
+    ligne(
+      "Report début " +
+      cap(monthLabel(db.month)) +
+      " : " +
+      rt(d.cj.rep)
+    );
+
+    ligne(
+      "À déclarer : " +
+      d.cj.d +
+      " h"
+    );
+
+    ligne(
+      "Report fin vers " +
+      cap(monthLabel(nextM(db.month))) +
+      " : " +
+      rt(d.cj.next)
+    );
+
+    ligne(
+      "Montant : " +
+      euros(d.totalJ),
+      11,
+      true
+    );
+
+    const nomFichier =
+      "Recap_" +
+      n.replace(/[^a-zA-Z0-9À-ÿ_-]+/g,"_") +
+      "_" +
+      db.month +
+      ".pdf";
+
+    const blob =
+      pdf.output("blob");
+
+    const fichier =
+      new File(
+        [blob],
+        nomFichier,
+        {type:"application/pdf"}
+      );
+
+    if(
+      navigator.share &&
+      navigator.canShare?.({
+        files:[fichier]
+      })
+    ){
+
+      await navigator.share({
+        files:[fichier],
+        title:"Récapitulatif "+n
+      });
+
+    }else{
+
+      const url =
+        URL.createObjectURL(blob);
+
+      const a =
+        document.createElement("a");
+
+      a.href = url;
+      a.download = nomFichier;
+
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      setTimeout(
+        ()=>URL.revokeObjectURL(url),
+        5000
+      );
+    }
 
   }catch(e){
-    console.error("Erreur PDF",e);
-    sjNativePrint();
+
+    console.error(e);
+
+    alert(
+      "Impossible de créer le PDF : " +
+      (e?.message || "erreur inconnue")
+    );
   }
- }; 
+}
+
+
+/* Le bouton PDF utilise maintenant le vrai PDF */
+
+const sjOriginalClientRecapPDF = clientRecap;
+
+clientRecap = function(n){
+
+  sjOriginalClientRecapPDF(n);
+
+  document
+    .querySelectorAll(".noPrint button")
+    .forEach(btn=>{
+
+      if(btn.textContent.includes("PDF")){
+
+        btn.onclick = sjClientPDF;
+
+        btn.textContent =
+          "📄 Envoyer PDF";
+      }
+    });
+};
 /* CORRECTION BOUTON CLIENT DÉJÀ CLÔTURÉ */
 
 const sjOriginalClientRecap = clientRecap;
