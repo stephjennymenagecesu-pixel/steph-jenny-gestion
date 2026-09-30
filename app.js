@@ -560,22 +560,38 @@ function stockLogText2(x){
 }
 
 
-function pdfShare(){
- // iPhone/iPad : la feuille d'impression permet ensuite Partager / Enregistrer dans Fichiers.
- // Un petit délai laisse le temps au navigateur d'appliquer les règles noPrint.
- try{
-   document.body.classList.add('printing-pdf');
-   setTimeout(()=>{window.print();setTimeout(()=>document.body.classList.remove('printing-pdf'),800)},80)
- }catch(e){
-   document.body.classList.remove('printing-pdf');
-   alert("Impossible d'ouvrir le PDF. Utilise Partager puis Imprimer depuis Safari.")
+async function pdfShare(){
+ const root=document.querySelector('main.app')||document.getElementById('app');
+ if(!root)return alert("Document introuvable.");
+ if(typeof html2pdf==='undefined'){
+   alert("Le générateur PDF n'est pas encore chargé. Vérifie la connexion internet puis réessaie.");
+   return;
  }
+ const clientName=db.ui?.recapClient||db.ui?.workerRecap||'recapitulatif';
+ const safe=String(clientName).normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9_-]+/g,"_");
+ const filename=`Steph_Jenny_${safe}_${db.month}.pdf`;
+ document.body.classList.add('printing-pdf');
+ try{
+   const opt={margin:[7,7,7,7],filename,image:{type:'jpeg',quality:0.96},html2canvas:{scale:2,useCORS:true,scrollY:0},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css','legacy']}};
+   const blob=await html2pdf().set(opt).from(root).outputPdf('blob');
+   const file=new File([blob],filename,{type:'application/pdf'});
+   if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],title:'Récapitulatif Steph & Jenny'});
+   }else{
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),2000);
+      alert("Le PDF a été créé. Ouvre-le dans Fichiers puis touche Partager pour l'envoyer.");
+   }
+ }catch(e){
+   if(e?.name!=='AbortError')alert("Le partage PDF n'a pas pu s'ouvrir. Réessaie depuis Safari si nécessaire.");
+ }finally{document.body.classList.remove('printing-pdf')}
 }
 
 function render(){({home,chrono,clients:clientsPage,planning,google,allRecap,clientRecap,payroll,reports,closure,interventions,flomax,settings,workerRecap}[screen]||home)()}
 
 function upcomingHomePlans(){return (db.planning||[]).filter(p=>!isDonePlan(p)&&planDateTime(p)>=Date.now()-30*60*1000).sort((a,b)=>planDateTime(a)-planDateTime(b)).slice(0,5)}
-function home(){let it=month(),s=mins(it,'stephanie'),j=mins(it,'jennyfer'),t=totals(),up=upcomingHomePlans();let upcoming=`<div class=card><div class=row><h2>Prochains clients</h2><button onclick="go('planning')">Voir le planning</button></div>${up.map(p=>`<div class=item><div class=row><b>${esc(p.client)}</b><span class=pill>${fd(p.date)} ${esc(p.time||'')}</span></div><p>${esc(p.type||'Intervention')}</p><button class=big onclick="startFromPlan('${p.id}')">▶️ Démarrer le chrono</button></div>`).join('')||`<p>Aucun prochain client importé.</p><button onclick="go('google')">📅 Importer depuis Google Agenda</button>`}</div>`;layout(`<div class=hero><div class=logo>Steph & Jenny</div><div class=sub>V10 FINALE — PDF / PARTAGE CORRIGÉ</div><p>${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</p></div>${db.current?`<div class="card notice"><h2>Chrono en cours</h2><p>${esc(db.current.client)} • ${worker(db.current.worker)}</p><div class=chrono id=t>00:00:00</div><button class="big stop" onclick=stopWork()>⏹ Terminer</button></div>`:`<button class=big onclick="go('chrono')">⏱️ Ouvrir le chronomètre</button>`}${upcoming}<div class=grid><button onclick="go('allRecap')">📋 Récap tous clients</button><button onclick="go('clientRecap')">👤 Récap client</button><button onclick="workerRecap('stephanie')">📄 PDF Stéphanie</button><button onclick="workerRecap('jennyfer')">📄 PDF Jennyfer</button><button onclick="go('reports')">🔁 Reports</button><button onclick="go('closure')">🔒 Clôture mois</button><button onclick="go('interventions')">✏️ Heures & notes</button><button onclick="go('flomax')">🧺 Flo & Max</button><button onclick="go('google')">📅 Google</button></div><div class=card><div class=grid3><div class=stat><strong>${fmin(s)}</strong><span>Stéphanie</span></div><div class=stat><strong>${fmin(j)}</strong><span>Jennyfer</span></div><div class=stat><strong>${machineTotal()}</strong><span>machines</span></div></div></div><div class="card ok"><h3>Montants estimés</h3><p>Stéphanie : <b>${euros(t.es)}</b></p><p>Jennyfer : <b>${euros(t.ej)}</b></p><p>Total : <b>${euros(t.total)}</b></p></div>`);if(db.current)live('t')}
+function home(){let it=month(),s=mins(it,'stephanie'),j=mins(it,'jennyfer'),t=totals(),up=upcomingHomePlans();let upcoming=`<div class=card><div class=row><h2>Prochains clients</h2><button onclick="go('planning')">Voir le planning</button></div>${up.map(p=>`<div class=item><div class=row><b>${esc(p.client)}</b><span class=pill>${fd(p.date)} ${esc(p.time||'')}</span></div><p>${esc(p.type||'Intervention')}</p><button class=big onclick="startFromPlan('${p.id}')">▶️ Démarrer le chrono</button></div>`).join('')||`<p>Aucun prochain client importé.</p><button onclick="go('google')">📅 Importer depuis Google Agenda</button>`}</div>`;layout(`<div class=hero><div class=logo>Steph & Jenny</div><div class=sub>V10 FINALE — VRAI PDF PARTAGEABLE</div><p>${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</p></div>${db.current?`<div class="card notice"><h2>Chrono en cours</h2><p>${esc(db.current.client)} • ${worker(db.current.worker)}</p><div class=chrono id=t>00:00:00</div><button class="big stop" onclick=stopWork()>⏹ Terminer</button></div>`:`<button class=big onclick="go('chrono')">⏱️ Ouvrir le chronomètre</button>`}${upcoming}<div class=grid><button onclick="go('allRecap')">📋 Récap tous clients</button><button onclick="go('clientRecap')">👤 Récap client</button><button onclick="workerRecap('stephanie')">📄 PDF Stéphanie</button><button onclick="workerRecap('jennyfer')">📄 PDF Jennyfer</button><button onclick="go('reports')">🔁 Reports</button><button onclick="go('closure')">🔒 Clôture mois</button><button onclick="go('interventions')">✏️ Heures & notes</button><button onclick="go('flomax')">🧺 Flo & Max</button><button onclick="go('google')">📅 Google</button></div><div class=card><div class=grid3><div class=stat><strong>${fmin(s)}</strong><span>Stéphanie</span></div><div class=stat><strong>${fmin(j)}</strong><span>Jennyfer</span></div><div class=stat><strong>${machineTotal()}</strong><span>machines</span></div></div></div><div class="card ok"><h3>Montants estimés</h3><p>Stéphanie : <b>${euros(t.es)}</b></p><p>Jennyfer : <b>${euros(t.ej)}</b></p><p>Total : <b>${euros(t.total)}</b></p></div>`);if(db.current)live('t')}
 function saveCurrentNote(){if(db.current&&$('#currentNote')){db.current.note=$('#currentNote').value;save()}}
 function chrono(){
  let selected=knownClientName(db.ui?.lastClient)||clients()[0]?.name||'';
