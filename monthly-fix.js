@@ -383,3 +383,90 @@ if(
       });
   },1200);
 }
+/* CORRECTION PDF IPHONE / PWA */
+const sjNativePrint = window.print.bind(window);
+
+window.print = function(){
+  try{
+    const main = document.querySelector("main.app");
+
+    if(!main){
+      sjNativePrint();
+      return;
+    }
+
+    const copie = main.cloneNode(true);
+
+    copie
+      .querySelectorAll(".nav,.noPrint,button,select,label")
+      .forEach(el => el.remove());
+
+    const fenetre = window.open("", "_blank");
+
+    if(!fenetre){
+      alert(
+        "Le PDF n'a pas pu s'ouvrir. Ouvre l'application dans Safari puis réessaie."
+      );
+      return;
+    }
+
+    const css =
+      new URL("styles.css", window.location.href).href;
+
+    fenetre.document.open();
+
+    fenetre.document.write(`
+      <!doctype html>
+      <html lang="fr">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport"
+              content="width=device-width,initial-scale=1">
+        <title>Steph & Jenny - Récapitulatif</title>
+
+        <link rel="stylesheet" href="${css}">
+
+        <style>
+          body{
+            background:white !important;
+            padding:20px;
+          }
+
+          main.app{
+            max-width:900px;
+            margin:auto;
+          }
+
+          .nav,
+          .noPrint,
+          button,
+          select,
+          label{
+            display:none !important;
+          }
+
+          @media print{
+            body{
+              background:white !important;
+            }
+          }
+        </style>
+      </head>
+
+      <body>
+        ${copie.outerHTML}
+      </body>
+      </html>
+    `);
+
+    fenetre.document.close();
+
+    setTimeout(()=>{
+      fenetre.focus();
+      fenetre.print();
+    },700);
+
+  }catch(e){
+    console.error("Erreur PDF",e);
+    sjNativePrint();
+  }
