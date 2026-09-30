@@ -470,6 +470,7 @@ window.print = function(){
     console.error("Erreur PDF",e);
     sjNativePrint();
   }
+ }; 
 /* CORRECTION BOUTON CLIENT DÉJÀ CLÔTURÉ */
 
 const sjOriginalClientRecap = clientRecap;
