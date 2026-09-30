@@ -470,3 +470,37 @@ window.print = function(){
     console.error("Erreur PDF",e);
     sjNativePrint();
   }
+/* CORRECTION BOUTON CLIENT DÉJÀ CLÔTURÉ */
+
+const sjOriginalClientRecap = clientRecap;
+
+clientRecap = function(n){
+
+  sjOriginalClientRecap(n);
+
+  const clientName =
+    knownClientName(
+      n ||
+      db.ui?.recapClient ||
+      clients()[0]?.name
+    );
+
+  if(!clientName) return;
+
+  const boutons =
+    document.querySelectorAll(".noPrint button");
+
+  boutons.forEach(btn => {
+
+    if(
+      isClientClosed(clientName) &&
+      btn.textContent.includes("Clôturer")
+    ){
+      btn.textContent = "↩️ Réouvrir ce client";
+
+      btn.onclick = function(){
+        reopenClient(clientName);
+      };
+    }
+  });
+};
